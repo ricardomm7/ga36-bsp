@@ -1,0 +1,31 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH 0003] ga36: add MIPI DSI and DPHY base address defines
+
+Add SUNXI_DSI_BASE and SUNXI_DPHY_BASE defines for the Allwinner A33
+MIPI DSI controller and D-PHY.
+
+CRITICAL: The DSI controller on A33 is at 0x01CA0000 and the D-PHY at
+0x01CA1000, NOT at 0x01c24000/0x01c24400 as some references claim.
+This is confirmed by the Linux kernel sun8i-a33.dtsi and the A33 user
+manual memory map.
+
+---
+
+ arch/arm/include/asm/arch-sunxi/cpu_sun4i.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h b/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
+index xxxxxxx..yyyyyyy 100644
+--- a/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
++++ b/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
+@@ -45,6 +45,10 @@
+ #define SUNXI_SJTAG_BASE		0x01c23c00
+ 
+ #define SUNXI_TP_BASE			0x01c25000
++
++#define SUNXI_DSI_BASE			0x01ca0000
++#define SUNXI_DPHY_BASE			0x01ca1000
++
+ #define SUNXI_PMU_BASE			0x01c25400
+ 
+ #if defined CONFIG_MACH_SUN7I || defined CONFIG_MACH_SUN8I_R40

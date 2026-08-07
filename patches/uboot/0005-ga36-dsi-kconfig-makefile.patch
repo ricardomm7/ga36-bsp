@@ -1,0 +1,68 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH 0005] ga36: dsi video driver kconfig, makefile and board init
+
+Wire up the GA36-MB V1.2 MIPI DSI driver into U-Boot's build system and
+board init sequence.
+
+---
+
+ board/sunxi/board.c    | 8 ++++++++
+ drivers/video/Kconfig  | 8 ++++++++
+ drivers/video/Makefile | 1 +
+ 3 files changed, 17 insertions(+)
+
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index xxxxxxx..yyyyyyy 100644
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -843,10 +843,18 @@ int misc_init_r(void)
+ 	return 0;
+ }
+ 
++#ifdef CONFIG_GA36_MIPI_DSI
++extern void sunxi_a33_dsi_register(void);
++#endif
++
+ int board_late_init(void)
+ {
+ #ifdef CONFIG_USB_ETHER
+ 	usb_ether_init();
+ #endif
+ 
++#ifdef CONFIG_GA36_MIPI_DSI
++	sunxi_a33_dsi_register();
++#endif
++
+ 	return 0;
+ }
+diff --git a/drivers/video/Kconfig b/drivers/video/Kconfig
+index xxxxxxx..yyyyyyy 100644
+--- a/drivers/video/Kconfig
++++ b/drivers/video/Kconfig
+@@ -1071,6 +1071,14 @@ config VIDEO_SUNXI
+ 
+ 	  The video output is initialized by U-Boot, and kept around by the
+ 	  kernel.
++
++config GA36_MIPI_DSI
++	bool "Enable GA36-MB V1.2 MIPI DSI video driver"
++	depends on MACH_SUN8I_A33
++	help
++	  Enable the raw-register MIPI DSI video driver for the GA36-MB V1.2
++	  (R36S clone) handheld console. This drives the JD9366 640x480 panel
++	  bypassing the U-Boot DM DSI framework.
+ 
+ source "drivers/video/stm32/Kconfig"
+ 
+diff --git a/drivers/video/Makefile b/drivers/video/Makefile
+index xxxxxxx..yyyyyyy 100644
+--- a/drivers/video/Makefile
++++ b/drivers/video/Makefile
+@@ -62,6 +62,7 @@ obj-$(CONFIG_VIDEO_LCD_ANX9804) += anx9804.o
+ obj-$(CONFIG_VIDEO_LCD_HITACHI_TX18D42VM) += hitachi_tx18d42vm_lcd.o
+ obj-$(CONFIG_VIDEO_LCD_SSD2828) += ssd2828.o
+ obj-$(CONFIG_VIDEO_LCD_RAYDIUM_RM68200) += raydium-rm68200.o
++obj-$(CONFIG_GA36_MIPI_DSI) += sunxi_a33_dsi.o
+ obj-$(CONFIG_VIDEO_TEGRA124) += tegra124/
+ obj-$(CONFIG_VIDEO_BRIDGE) += bridge/
+ obj-$(CONFIG_CONSOLE_NORMAL) += console_normal.o

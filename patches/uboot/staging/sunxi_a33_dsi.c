@@ -1,0 +1,700 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Allwinner A33 MIPI DSI Video Driver for U-Boot
+ * Target: GA36-MB V1.2 (R36S)
+ * Panel: JD9366 640x480, 2-lane MIPI DSI, RGB888
+ *
+ * Raw-register implementation that bypasses the U-Boot DM DSI framework
+ * (no upstream A33 DSI driver exists). Initializes the full display pipeline:
+ *
+ *   DRAM FB -> DE1 Backend -> TCON0 -> DSI Controller -> D-PHY -> Panel
+ *
+ * Register bases confirmed from Linux kernel sun8i-a33.dtsi:
+ *   DSI:  0x01CA0000   (NOT 0x01c24000)
+ *   DPHY: 0x01CA1000   (NOT 0x01c24400)
+ *
+ * Clock tree:
+ *   PLL_VIDEO0 = 24MHz * 15 = 360 MHz
+ *   PLL_MIPI   = PLL_VIDEO0 * 1 * 1 / 1 = 360 MHz
+ *   TCON0 pixclk = PLL_MIPI / 12 = 30 MHz
+ *   DSI bit clock = 360 Mbps/lane (2 lanes, RGB888)
+ *
+ * Panel timing (from vendor fex/lcd.ko):
+ *   640x480, HFP=40, HBP=60, HSYNC=20, VFP=8, VBP=10, VSYNC=2
+ *
+ * References:
+ *   - Linux kernel: sun6i_mipi_dsi.c, phy-sun6i-mipi-dphy.c, sun4i_tcon.c
+ *   - U-Boot: drivers/video/sunxi/sunxi_display.c (DE1 backend patterns)
+ *   - Vendor lcd.ko DCS sequence (jd9366_init.h)
+ */
+
+#include <common.h>
+#include <dm.h>
+#include <video.h>
+#include <asm/io.h>
+#include <asm/gpio.h>
+#include <linux/delay.h>
+#include <video/jd9366_init.h>
+
+/* ========================================================================= *
+ * Panel parameters
+ * ========================================================================= */
+#define PANEL_WIDTH     640
+#define PANEL_HEIGHT    480
+#define PANEL_HFP       40
+#define PANEL_HBP       60
+#define PANEL_HSYNC      20
+#define PANEL_VFP         8
+#define PANEL_VBP        10
+#define PANEL_VSYNC       2
+#define PANEL_HTOTAL    (PANEL_WIDTH + PANEL_HFP + PANEL_HBP + PANEL_HSYNC) /* 760 */
+#define PANEL_VTOTAL    (PANEL_HEIGHT + PANEL_VFP + PANEL_VBP + PANEL_VSYNC) /* 500 */
+#define PANEL_BPP        32
+#define PANEL_LANES       2
+#define PIXEL_CLK_MHZ    30
+#define MIPI_CLK_MHZ    360
+#define TCON_DIV        (MIPI_CLK_MHZ / PIXEL_CLK_MHZ) /* 12 */
+
+/* ========================================================================= *
+ * Register base addresses
+ * ========================================================================= */
+#define CCU_BASE        0x01c20000
+#define PIO_BASE        0x01c20800
+#define TCON0_BASE      0x01c0c000
+#define DSI_BASE        0x01ca0000
+#define DPHY_BASE       0x01ca1000
+#define DE_BE0_BASE     0x01e60000
+
+/* ---- CCU registers ---- */
+#define CCU_PLL_VIDEO0      (CCU_BASE + 0x010)
+#define CCU_PLL_MIPI        (CCU_BASE + 0x040)
+#define CCU_AHB1_GATE0      (CCU_BASE + 0x060)
+#define CCU_AHB1_GATE1      (CCU_BASE + 0x064)
+#define CCU_DRAM_GATE        (CCU_BASE + 0x100)
+#define CCU_DE_BE_CLK       (CCU_BASE + 0x104)
+#define CCU_TCON0_CLK       (CCU_BASE + 0x118)
+#define CCU_DSI_CLK         (CCU_BASE + 0x168)
+#define CCU_BUS_SOFT_RST0   (CCU_BASE + 0x2c0)
+#define CCU_BUS_SOFT_RST1   (CCU_BASE + 0x2c4)
+
+/* ---- DSI controller registers (at 0x01CA0000) ---- */
+#define DSI_CTL             (DSI_BASE + 0x000)
+#define DSI_BASIC_CTL       (DSI_BASE + 0x00c)
+#define DSI_BASIC_CTL0      (DSI_BASE + 0x010)
+#define DSI_BASIC_CTL1      (DSI_BASE + 0x014)
+#define DSI_BASIC_SIZE0     (DSI_BASE + 0x018)
+#define DSI_BASIC_SIZE1     (DSI_BASE + 0x01c)
+#define DSI_INST_FUNC(n)    (DSI_BASE + 0x020 + (n) * 4)
+#define DSI_INST_LOOP_SEL   (DSI_BASE + 0x040)
+#define DSI_INST_LOOP_NUM0  (DSI_BASE + 0x044)
+#define DSI_INST_LOOP_NUM1  (DSI_BASE + 0x054)
+#define DSI_INST_JUMP_SEL   (DSI_BASE + 0x048)
+#define DSI_INST_JUMP_CFG(n) (DSI_BASE + 0x04c + (n) * 4)
+#define DSI_TRANS_START     (DSI_BASE + 0x060)
+#define DSI_TRANS_ZERO      (DSI_BASE + 0x078)
+#define DSI_TCON_DRQ        (DSI_BASE + 0x07c)
+#define DSI_PIXEL_CTL0      (DSI_BASE + 0x080)
+#define DSI_PIXEL_CTL1      (DSI_BASE + 0x084)
+#define DSI_PIXEL_PH        (DSI_BASE + 0x090)
+#define DSI_PIXEL_PF0       (DSI_BASE + 0x098)
+#define DSI_PIXEL_PF1       (DSI_BASE + 0x09c)
+#define DSI_CMD_CTL         (DSI_BASE + 0x200)
+#define DSI_CMD_TX(n)       (DSI_BASE + 0x300 + (n) * 4)
+
+/* ---- D-PHY registers (at 0x01CA1000) ---- */
+#define DPHY_GCTL           (DPHY_BASE + 0x00)
+#define DPHY_TX_CTL         (DPHY_BASE + 0x04)
+#define DPHY_TX_TIME0       (DPHY_BASE + 0x10)
+#define DPHY_TX_TIME1       (DPHY_BASE + 0x14)
+#define DPHY_TX_TIME2       (DPHY_BASE + 0x18)
+#define DPHY_TX_TIME3       (DPHY_BASE + 0x1c)
+#define DPHY_TX_TIME4       (DPHY_BASE + 0x20)
+#define DPHY_ANA0           (DPHY_BASE + 0x4c)
+#define DPHY_ANA1           (DPHY_BASE + 0x50)
+#define DPHY_ANA2           (DPHY_BASE + 0x54)
+#define DPHY_ANA3           (DPHY_BASE + 0x58)
+
+/* ---- TCON0 registers (at 0x01C0C000) ---- */
+#define TCON_GCTL           (TCON0_BASE + 0x00)
+#define TCON0_CTL           (TCON0_BASE + 0x40)
+#define TCON0_DCLK          (TCON0_BASE + 0x44)
+#define TCON0_BASIC0        (TCON0_BASE + 0x48)
+#define TCON0_BASIC1        (TCON0_BASE + 0x4c)
+#define TCON0_BASIC2        (TCON0_BASE + 0x50)
+#define TCON0_BASIC3        (TCON0_BASE + 0x54)
+#define TCON0_IO_TRI        (TCON0_BASE + 0x8c)
+#define TCON1_IO_TRI        (TCON0_BASE + 0xf4)
+
+/* ---- DE1 Backend registers (at 0x01E60000) ---- */
+#define DE_BE_MODE          (DE_BE0_BASE + 0x800)
+#define DE_BE_BACKCOLOR     (DE_BE0_BASE + 0x804)
+#define DE_BE_DISP_SIZE     (DE_BE0_BASE + 0x808)
+#define DE_BE_LAYER0_SIZE   (DE_BE0_BASE + 0x810)
+#define DE_BE_LAYER0_ATTR0  (DE_BE0_BASE + 0x818)
+#define DE_BE_LAYER0_ATTR1  (DE_BE0_BASE + 0x81c)
+#define DE_BE_LAYER0_STRIDE (DE_BE0_BASE + 0x840)
+#define DE_BE_LAYER0_ADDR_L (DE_BE0_BASE + 0x850)
+#define DE_BE_LAYER0_ADDR_H (DE_BE0_BASE + 0x854)
+#define DE_BE_REG_CTRL      (DE_BE0_BASE + 0x870)
+#define DE_BE_OUTPUT_COLOR  (DE_BE0_BASE + 0x9c0)
+
+/* ========================================================================= *
+ * 1. Clock & Reset Setup
+ * ========================================================================= */
+static void a33_dsi_clocks_init(void)
+{
+	/*
+	 * PLL_VIDEO0 (PLL3) = 24 MHz * N / M
+	 * Register 0x010: bit31=enable, bits15-8=N, bits3-0=M
+	 * Target: 360 MHz = 24 * 15 / 1 (N=15, M_reg=0 → M=1)
+	 */
+	writel((1u << 31) | (1u << 24) | (14u << 8), CCU_PLL_VIDEO0);
+	mdelay(2);
+
+	/*
+	 * PLL_MIPI = PLL_VIDEO0 * N * K / M
+	 * Register 0x040: bit31=enable, bit23=LDO2_EN, bit22=LDO1_EN,
+	 *   bits11-8=N, bits5-4=K, bits3-0=M
+	 * Target: 360 MHz = 360 * 1 * 1 / 1
+	 * CRITICAL: Must enable LDO1 and LDO2 for PLL analog circuitry
+	 */
+	writel((1u << 31) | (1u << 23) | (1u << 22) |
+	       (1u << 8) | (1u << 4) | 1u, CCU_PLL_MIPI);
+	mdelay(2);
+
+	/*
+	 * AHB1 clock gates:
+	 *   CCU_AHB1_GATE0 (0x060): bit 1  = MIPI_DSI
+	 *   CCU_AHB1_GATE1 (0x064): bit 4  = LCD0 / TCON0
+	 *   CCU_AHB1_GATE1 (0x064): bit 12 = DE_BE0
+	 */
+	setbits_le32(CCU_AHB1_GATE0, (1u << 1));
+	setbits_le32(CCU_AHB1_GATE1, (1u << 12) | (1u << 4));
+
+	/*
+	 * Bus resets:
+	 *   CCU_BUS_SOFT_RST0 (0x2c0): bit 1  = MIPI_DSI deassert
+	 *   CCU_BUS_SOFT_RST1 (0x2c4): bit 4  = LCD0 deassert
+	 *   CCU_BUS_SOFT_RST1 (0x2c4): bit 12 = DE_BE0 deassert
+	 */
+	setbits_le32(CCU_BUS_SOFT_RST0, (1u << 1));
+	setbits_le32(CCU_BUS_SOFT_RST1, (1u << 12) | (1u << 4));
+
+	/* Enable DRAM clock gate for DE_BE0: register 0x100 bit 26 */
+	setbits_le32(CCU_DRAM_GATE, (1u << 26));
+
+	/*
+	 * TCON0 module clock: source = PLL_MIPI (mux=0), gate enable
+	 * Register 0x118: bit31=gate, bits26-24=source
+	 * On A33, mux 0 = PLL_MIPI for TCON0
+	 */
+	writel((1u << 31) | (0u << 24), CCU_TCON0_CLK);
+
+	/*
+	 * DSI module clock: gate enable, source = MIPI PLL
+	 * Register 0x168: bit31=gate, bits25-24=source (0=OSC24M? check)
+	 */
+	writel((1u << 31), CCU_DSI_CLK);
+
+	/*
+	 * DE Backend module clock: source = PLL_VIDEO0, gate enable
+	 * Register 0x104: bit31=gate, bits25-24=source (0=PLL_VIDEO0)
+	 */
+	writel((1u << 31) | (0u << 24), CCU_DE_BE_CLK);
+}
+
+/* ========================================================================= *
+ * 2. Panel Power & Reset GPIOs
+ * ========================================================================= */
+static void a33_panel_power_on(void)
+{
+	/*
+	 * Panel reset: PH07 (active low). Toggle low then high.
+	 * Panel power (DC1SW): already enabled by the backlight beacon
+	 * in the SPL (patches 0001/0002), so we don't need to do it again.
+	 */
+	gpio_request(SUNXI_GPH(7), "panel_reset");
+	gpio_direction_output(SUNXI_GPH(7), 0);
+	mdelay(20);
+	gpio_direction_output(SUNXI_GPH(7), 1);
+	mdelay(50);
+
+	/*
+	 * Backlight: PH00 (high = on).
+	 * Also already enabled by the beacon, but ensure it's on.
+	 */
+	gpio_request(SUNXI_GPH(0), "backlight");
+	gpio_direction_output(SUNXI_GPH(0), 1);
+}
+
+/* ========================================================================= *
+ * 3. D-PHY Initialization (at 0x01CA1000)
+ *
+ * Reference: Linux kernel phy-sun6i-mipi-dphy.c
+ * Configures the MIPI D-PHY for 2-lane operation at 360 Mbps/lane
+ * ========================================================================= */
+static void a33_dphy_init(void)
+{
+	/* TX control: continuous HS clock */
+	writel(0x10000000, DPHY_TX_CTL);
+
+	/*
+	 * TX timing parameters for 360 MHz bit clock:
+	 * TX_TIME0: bits31-24=LP_CLK_DIV(14), bits15-8=HS_PREPARE(6),
+	 *           bits7-0=HS_TRAIL(10)
+	 */
+	writel((14u << 24) | (6u << 8) | 10u, DPHY_TX_TIME0);
+
+	/*
+	 * TX_TIME1: bits31-24=CLK_PREPARE(7), bits23-16=CLK_ZERO(50),
+	 *           bits15-8=CLK_PRE(3), bits7-0=CLK_POST(10)
+	 */
+	writel((7u << 24) | (50u << 16) | (3u << 8) | 10u, DPHY_TX_TIME1);
+
+	/* TX_TIME2: bits7-0=CLK_TRAIL(30) */
+	writel(30u, DPHY_TX_TIME2);
+
+	/* TX_TIME3: unused, clear */
+	writel(0, DPHY_TX_TIME3);
+
+	/* TX_TIME4: HS TX analog fine-tuning */
+	writel(3u | (3u << 8), DPHY_TX_TIME4);
+
+	/*
+	 * Analog controls — values from Linux kernel, tuned for 2-lane DSI.
+	 * ANA0: PWS | DMPC | SLV(7) | DMPD(lanes) | DEN(lanes)
+	 *   bit31=PWS, bit28=DMPC, bits14-12=SLV(7),
+	 *   bits21-20=DMPD(0x3), bits17-16=DEN(0x3)
+	 */
+	writel(0x90337000, DPHY_ANA0);
+
+	/* ANA1: VTTMODE | CSMPS(1)
+	 *   bit31=VTTMODE, bits9-8=CSMPS(1)
+	 */
+	writel(0x80000100, DPHY_ANA1);
+
+	/*
+	 * ANA2: EN_P2S_CPU(lanes) | EN_P2S_CPU_CLK | EN_CK_CPU | ENIB
+	 *   bits25-24=EN_P2S_CPU(0x3), bit28=EN_P2S_CPU_CLK,
+	 *   bit4=EN_CK_CPU, bit1=ENIB
+	 */
+	writel(0x13000012, DPHY_ANA2);
+	udelay(1);
+
+	/*
+	 * ANA3: staged enable of voltage regulators
+	 * Step 1: EN_VTTD(lanes,@28) | EN_VTTC(@27) | EN_DIV(@26)
+	 */
+	writel((0x3u << 28) | (1u << 27) | (1u << 26), DPHY_ANA3);
+	udelay(1);
+
+	/* Step 2: also EN_LDOR(@25) | EN_LDOC(@24) | EN_LDOD(@23) */
+	setbits_le32(DPHY_ANA3, (1u << 25) | (1u << 24) | (1u << 23));
+	udelay(1);
+
+	/* ANA2: re-assert EN_CK_CPU after LDO settle */
+	setbits_le32(DPHY_ANA2, (1u << 4));
+	udelay(1);
+
+	/*
+	 * Enable D-PHY globally: LANE_NUM(2) at bits5-4, EN at bit0.
+	 * For 2 data lanes: LANE_NUM = 2 → (2 << 4) = 0x20
+	 */
+	writel((2u << 4) | 1u, DPHY_GCTL);
+}
+
+/* ========================================================================= *
+ * 4. DSI Controller Initialization (at 0x01CA0000)
+ *
+ * Reference: Linux kernel sun6i_mipi_dsi.c
+ * Programs the instruction state machine for 2-lane video burst mode
+ * ========================================================================= */
+static void a33_dsi_controller_init(void)
+{
+	/*
+	 * Instruction state machine for video mode.
+	 * Each INST_FUNC register configures one instruction step:
+	 *   bits31-28: mode (0=stop, 1=TBA, 2=HS, 3=escape, 4=HSCexit, 5=NOP)
+	 *   bits27-24: escape entry code
+	 *   bits23-20: packet type (0=pixel, 1=command)
+	 *   bit4:      clock lane enable
+	 *   bits3-0:   data lane enable mask
+	 */
+	writel(0x00000013, DSI_INST_FUNC(0)); /* LP11: stop, clk+data(0x3) */
+	writel(0x10000001, DSI_INST_FUNC(1)); /* TBA: turn bus around, lane0 */
+	writel(0x20000010, DSI_INST_FUNC(2)); /* HSC: HS clock, clock lane */
+	writel(0x20000003, DSI_INST_FUNC(3)); /* HSD: HS data, lanes 0+1 */
+	writel(0x34100001, DSI_INST_FUNC(4)); /* LPDT: escape+cmd, lane0 */
+	writel(0x40000010, DSI_INST_FUNC(5)); /* HSCEXIT: HS clk exit */
+	writel(0x00000003, DSI_INST_FUNC(6)); /* NOP: stop, data lanes */
+	writel(0x50000013, DSI_INST_FUNC(7)); /* DLY: nop, clk+data */
+
+	/*
+	 * Loop configuration: loop instruction 2 between LP11 and HSC.
+	 * Bits 11-8 = step2_from (0 = LP11), bits 3-0 = step2_to (2 = HSC)
+	 */
+	writel(0x00000002, DSI_INST_LOOP_SEL);
+
+	/*
+	 * Loop count: N0 = VTotal - VActive - 1 = 500 - 480 - 1 = 19
+	 * N1 = same, for the second loop counter
+	 */
+	writel((19u << 16) | 19u, DSI_INST_LOOP_NUM0);
+	writel((19u << 16) | 19u, DSI_INST_LOOP_NUM1);
+
+	/* Jump: instruction 0 (NOP) → instruction 2 (HSC), count=1 */
+	writel(0x00000000, DSI_INST_JUMP_SEL);
+	writel((2u << 20) | (6u << 16) | 1u, DSI_INST_JUMP_CFG(0));
+
+	/* Enable DSI controller */
+	writel(1, DSI_CTL);
+
+	/*
+	 * Basic control: video burst mode with trail compensation.
+	 * Bit 0 = VIDEO_BURST, Bit 3 = TRAIL_FILL, Bits 7-4 = TRAIL_INV(4)
+	 */
+	writel(0x00000049, DSI_BASIC_CTL);
+
+	/*
+	 * Basic control 0: ECC + CRC + EOTP enable
+	 * bit18=HS_EOTP_EN, bit17=CRC_EN, bit16=ECC_EN
+	 */
+	writel((1u << 18) | (1u << 17) | (1u << 16), DSI_BASIC_CTL0);
+
+	/*
+	 * Basic control 1: video mode, precision, fill, start delay
+	 * bit0=VIDEO_MODE, bit1=PRECISION, bit2=FILL
+	 * bits16-4=VIDEO_ST_DELAY (TODO: calculate properly, use 0 for now)
+	 */
+	writel(0x00000007, DSI_BASIC_CTL1);
+
+	/*
+	 * Vertical timing:
+	 * BASIC_SIZE0: VSA(2) | VBP(10) << 16
+	 * BASIC_SIZE1: VACT(480) | VT(500) << 16
+	 */
+	writel(PANEL_VSYNC | (PANEL_VBP << 16), DSI_BASIC_SIZE0);
+	writel(PANEL_HEIGHT | (PANEL_VTOTAL << 16), DSI_BASIC_SIZE1);
+
+	/* Pixel format: RGB888 = format code 5 */
+	writel(5, DSI_PIXEL_CTL0);
+	writel(0, DSI_PIXEL_CTL1);
+
+	/*
+	 * Pixel packet header for RGB888:
+	 * DT=0x3E (packed pixel stream 24-bit), VC=0
+	 * ECC computed at runtime by hardware
+	 */
+	writel(0x003E0000, DSI_PIXEL_PH);
+	writel(0x0000FFFF, DSI_PIXEL_PF0);
+	writel(0x0000FFFF, DSI_PIXEL_PF1);
+
+	/* TCON DRQ: enable mode with threshold */
+	writel((1u << 28) | 0x100, DSI_TCON_DRQ);
+
+	/* Trans start */
+	writel(10, DSI_TRANS_START);
+	writel(0, DSI_TRANS_ZERO);
+}
+
+/* ========================================================================= *
+ * 5. DCS Command Transmission (LP mode)
+ * ========================================================================= */
+static int a33_dsi_dcs_write(u8 cmd, const u8 *data, int len)
+{
+	int i, timeout;
+	u32 hdr;
+
+	if (len == 0) {
+		/*
+		 * DCS Short Write (no parameter): data type = 0x05
+		 * Packet: [DI | cmd | 0x00 | ECC]
+		 */
+		hdr = 0x05 | (cmd << 8);
+		writel(hdr, DSI_CMD_TX(0));
+		writel(3, DSI_CMD_CTL); /* 4 bytes total - 1 */
+	} else if (len == 1) {
+		/*
+		 * DCS Short Write (1 parameter): data type = 0x15
+		 * Packet: [DI | cmd | data[0] | ECC]
+		 */
+		hdr = 0x15 | (cmd << 8) | (data[0] << 16);
+		writel(hdr, DSI_CMD_TX(0));
+		writel(3, DSI_CMD_CTL);
+	} else {
+		/*
+		 * DCS Long Write: data type = 0x39
+		 * Header: [DI | WC_L | WC_H | ECC]
+		 * Payload: [cmd | data[0] | data[1] | ... ]
+		 */
+		int total_payload = len + 1; /* cmd byte + data */
+		int words;
+
+		hdr = 0x39 | ((total_payload & 0xFF) << 8) |
+		      (((total_payload >> 8) & 0xFF) << 16);
+		writel(hdr, DSI_CMD_TX(0));
+
+		/* Pack payload: first byte is the cmd, rest is data */
+		words = (total_payload + 3) / 4;
+		for (i = 0; i < words; i++) {
+			u32 val = 0;
+			int j;
+			for (j = 0; j < 4; j++) {
+				int idx = i * 4 + j;
+				u8 byte;
+				if (idx == 0)
+					byte = cmd;
+				else if (idx - 1 < len)
+					byte = data[idx - 1];
+				else
+					byte = 0;
+				val |= (byte << (j * 8));
+			}
+			writel(val, DSI_CMD_TX(1 + i));
+		}
+		writel((1 + words) * 4 - 1, DSI_CMD_CTL);
+	}
+
+	/* Trigger: start instruction execution (bit 0 of BASIC_CTL0) */
+	setbits_le32(DSI_BASIC_CTL0, 1u);
+
+	/* Wait for completion: bit 0 clears when done */
+	timeout = 10000;
+	while ((readl(DSI_BASIC_CTL0) & 1u) && --timeout > 0)
+		udelay(10);
+
+	if (timeout == 0) {
+		debug("DSI: DCS cmd 0x%02x timeout\n", cmd);
+		return -1;
+	}
+
+	udelay(100); /* inter-command delay for panel stability */
+	return 0;
+}
+
+/* ========================================================================= *
+ * 6. Panel DCS Init Sequence (from jd9366_init.h)
+ * ========================================================================= */
+static void a33_panel_dcs_init(void)
+{
+	int i;
+
+	debug("DSI: sending JD9366 DCS init (%d entries)\n",
+	      (int)ARRAY_SIZE(jd9366_init));
+
+	for (i = 0; i < (int)ARRAY_SIZE(jd9366_init); i++) {
+		const struct jd9366_dcs_entry *e = &jd9366_init[i];
+
+		if (e->count == JD9366_DCS_DELAY) {
+			mdelay(e->para[0]);
+			continue;
+		}
+
+		if (e->count == 0) {
+			a33_dsi_dcs_write(e->cmd, NULL, 0);
+		} else {
+			a33_dsi_dcs_write(e->cmd, e->para, e->count);
+		}
+	}
+
+	debug("DSI: panel init complete\n");
+}
+
+/* ========================================================================= *
+ * 7. TCON0 Initialization (at 0x01C0C000)
+ * ========================================================================= */
+static void a33_tcon0_init(void)
+{
+	/* Disable TCON before configuration */
+	writel(0, TCON_GCTL);
+
+	/* Disable TCON1 output triggers (not used) */
+	writel(0xFFFFFFFF, TCON1_IO_TRI);
+
+	/*
+	 * Active resolution: (width-1) << 16 | (height-1)
+	 */
+	writel(((PANEL_WIDTH - 1) << 16) | (PANEL_HEIGHT - 1), TCON0_BASIC0);
+
+	/*
+	 * H timing: (HTotal-1) << 16 | (HBP-1)
+	 * Note: HBP here includes HSYNC in some interpretations.
+	 * Using raw HBP=60 per fex.
+	 */
+	writel(((PANEL_HTOTAL - 1) << 16) | (PANEL_HBP - 1), TCON0_BASIC1);
+
+	/*
+	 * V timing: (VTotal*2) << 16 | (VBP-1)
+	 * Sunxi TCON doubles the VTotal value per hardware convention.
+	 */
+	writel(((PANEL_VTOTAL * 2 - 1) << 16) | (PANEL_VBP - 1), TCON0_BASIC2);
+
+	/*
+	 * Sync widths: (HSYNC-1) << 16 | (VSYNC-1)
+	 */
+	writel(((PANEL_HSYNC - 1) << 16) | (PANEL_VSYNC - 1), TCON0_BASIC3);
+
+	/*
+	 * DCLK: enable (bits31-28 = 0xF) + divider
+	 * Pixel clock = PLL_MIPI / divider = 360 / 12 = 30 MHz
+	 */
+	writel((0xFu << 28) | TCON_DIV, TCON0_DCLK);
+
+	/* Disable IO triggers for TCON0 (DSI doesn't use them) */
+	writel(0xFFFFFFFF, TCON0_IO_TRI);
+
+	/*
+	 * TCON0 control: enable + DSI output interface.
+	 * bit31 = enable, bits25-24 = interface (01 = DSI on A33)
+	 */
+	writel((1u << 31) | (1u << 24), TCON0_CTL);
+
+	/* Enable TCON globally */
+	writel((1u << 31), TCON_GCTL);
+}
+
+/* ========================================================================= *
+ * 8. DE1 Backend Initialization (at 0x01E60000)
+ * ========================================================================= */
+static void a33_de_be_init(ulong fb_addr)
+{
+	int i;
+
+	/* Soft-reset the DE backend: write 0 then enable */
+	writel(0, DE_BE_MODE);
+	mdelay(1);
+
+	/* Clear all backend registers 0x800 - 0x9FF */
+	for (i = 0; i < 0x200; i += 4)
+		writel(0, DE_BE0_BASE + 0x800 + i);
+
+	/* Background color: black */
+	writel(0x00000000, DE_BE_BACKCOLOR);
+
+	/* Display size: (width-1) << 16 | (height-1) */
+	writel(((PANEL_WIDTH - 1) << 16) | (PANEL_HEIGHT - 1), DE_BE_DISP_SIZE);
+
+	/* Layer 0 size */
+	writel(((PANEL_WIDTH - 1) << 16) | (PANEL_HEIGHT - 1), DE_BE_LAYER0_SIZE);
+
+	/* Layer 0 stride: width * bytes_per_pixel */
+	writel(PANEL_WIDTH * (PANEL_BPP / 8), DE_BE_LAYER0_STRIDE);
+
+	/*
+	 * Layer 0 framebuffer address (split into low/high):
+	 * Low = fb_addr << 3 (hardware quirk: address is shifted left by 3)
+	 * High = fb_addr >> 29 (upper 3 bits)
+	 */
+	writel((u32)(fb_addr << 3), DE_BE_LAYER0_ADDR_L);
+	writel((u32)(fb_addr >> 29), DE_BE_LAYER0_ADDR_H);
+
+	/*
+	 * Layer 0 attribute 1: pixel format
+	 * Format 0x09 << 8 = ARGB8888 (32-bit XRGB with alpha)
+	 */
+	writel(0x09 << 8, DE_BE_LAYER0_ATTR1);
+
+	/*
+	 * Layer 0 attribute 0: enable layer
+	 * bit0 = layer enable, bit1 = alpha enable
+	 */
+	writel(0x00000003, DE_BE_LAYER0_ATTR0);
+
+	/* Output color space: direct output (no CSC) */
+	writel(0, DE_BE_OUTPUT_COLOR);
+
+	/* Enable backend: bit0 = enable, bit1 = start */
+	writel(0x00000003, DE_BE_MODE);
+
+	/* Trigger register load */
+	writel(1, DE_BE_REG_CTRL);
+}
+
+/* ========================================================================= *
+ * 9. Start DSI video stream
+ * ========================================================================= */
+static void a33_dsi_video_start(void)
+{
+	/*
+	 * Restore instruction 0 to LP11 (was temporarily set to LPDT
+	 * during DCS command phase)
+	 */
+	writel(0x00000013, DSI_INST_FUNC(0));
+
+	/* Start video mode: trigger instruction start in BASIC_CTL0 */
+	setbits_le32(DSI_BASIC_CTL0, 1u);
+}
+
+/* ========================================================================= *
+ * DM_VIDEO Driver Integration
+ * ========================================================================= */
+
+static int sunxi_a33_dsi_probe(struct udevice *dev)
+{
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
+	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
+
+	uc_priv->xsize = PANEL_WIDTH;
+	uc_priv->ysize = PANEL_HEIGHT;
+	uc_priv->bpix = VIDEO_BPP32;
+
+	debug("DSI: probe fb=0x%lx size=0x%x\n",
+	      (ulong)plat->base, plat->size);
+
+	/* Phase 1: Clocks + Resets */
+	a33_dsi_clocks_init();
+
+	/* Phase 2: Panel power + reset GPIO */
+	a33_panel_power_on();
+
+	/* Phase 3: Display Engine backend → needs FB address */
+	a33_de_be_init(plat->base);
+
+	/* Phase 4: TCON0 (timing generator) */
+	a33_tcon0_init();
+
+	/* Phase 5: D-PHY (physical layer) */
+	a33_dphy_init();
+
+	/* Phase 6: DSI controller */
+	a33_dsi_controller_init();
+
+	/* Phase 7: Panel DCS init sequence */
+	a33_panel_dcs_init();
+
+	/* Phase 8: Start video stream */
+	a33_dsi_video_start();
+
+	debug("DSI: display pipeline active\n");
+	return 0;
+}
+
+static int sunxi_a33_dsi_bind(struct udevice *dev)
+{
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
+
+	/* Reserve framebuffer: 640 * 480 * 4 = 1,228,800 bytes */
+	plat->size = PANEL_WIDTH * PANEL_HEIGHT * (PANEL_BPP / 8);
+
+	return 0;
+}
+
+U_BOOT_DRIVER(sunxi_a33_dsi) = {
+	.name	= "sunxi_a33_dsi",
+	.id	= UCLASS_VIDEO,
+	.bind	= sunxi_a33_dsi_bind,
+	.probe	= sunxi_a33_dsi_probe,
+};
+
+/*
+ * Board-level init hook: called from board/sunxi/board.c
+ * Creates the video device without needing a DT node.
+ */
+void sunxi_a33_dsi_register(void)
+{
+	struct udevice *dev;
+
+	if (device_bind_driver(gd->dm_root, "sunxi_a33_dsi",
+			       "dsi_display", &dev))
+		debug("DSI: failed to bind video driver\n");
+}

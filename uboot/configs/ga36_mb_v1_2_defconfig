@@ -6,15 +6,15 @@
 #   dcdc5=1350mV (VCC-DRAM)
 # Debug console = UART2 (PB00/PB01) via stdout-path in the board DTS.
 #
-# Bring-up revision (no UART available):
+# Bring-up revision:
 #   * CONFIG_GA36_BACKLIGHT_BEACON turns the LCD backlight on in the SPL
 #     (before DRAM init) and blinks it in U-Boot proper, giving a visible
 #     boot-state indicator without a serial console.
+#   * CONFIG_GA36_MIPI_DSI enables raw-register MIPI DSI video output for
+#     the JD9366 640x480 panel (TCON0→DSI→DPHY pipeline).
 #   * DRAM lowered to the proven mainline A33 value (CLK=432, ZQ=15291 as
 #     used by A33-OLinuXino) until the vendor 552 MHz/ZQ=63351 values are
-#     validated on silicon. Raise it back once the board boots.
-#   * CONFIG_VIDEO removed: the stock RGB/LCD video path cannot drive the
-#     MIPI-DSI (JD9366) panel and only risks a silent hang.
+#     validated on silicon.
 
 CONFIG_ARM=y
 CONFIG_ARCH_SUNXI=y
@@ -25,7 +25,7 @@ CONFIG_DRAM_CLK=432
 CONFIG_DRAM_ZQ=15291
 CONFIG_DRAM_ODT_EN=y
 CONFIG_GA36_BACKLIGHT_BEACON=y
-# CONFIG_VIDEO_SUNXI is not set
+CONFIG_GA36_MIPI_DSI=y
 CONFIG_AXP_GPIO=y
 CONFIG_AXP_DCDC1_VOLT=3300
 CONFIG_AXP_DCDC2_VOLT=1100
@@ -41,6 +41,12 @@ CONFIG_CMD_FAT=y
 CONFIG_CMD_GPIO=y
 CONFIG_CMD_MMC=y
 CONFIG_CMD_USB=y
+CONFIG_VIDEO=y
+CONFIG_DM_VIDEO=y
+CONFIG_VIDEO_LOGO=y
+CONFIG_VIDCONSOLE=y
+CONFIG_SYS_WHITE_ON_BLACK=y
+# CONFIG_VIDEO_SUNXI is not set
 CONFIG_BOOTCOMMAND="echo == GA36 U-Boot ==; load mmc 0:1 0x41900000 /boot/boot.scr; source 0x41900000"
 CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x50
 CONFIG_SYS_SUNXI_UART=2
