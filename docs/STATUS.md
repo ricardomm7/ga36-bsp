@@ -18,7 +18,7 @@ Target: GA36-MB V1.2 (R36S), Allwinner A33. The recovered fex
 | First hardware boot | pending | flash `ga36-custom.img`, observe beacon: no glow / steady glow (DRAM hang) / 3 blinks (U-Boot OK) |
 | Serial console milestone | blocked | UART2 (PB00/PB01) wiring unverified on this revision; beacon replaces it for now |
 | OTG / SD2 / FN bindings | intentionally unassigned | must never be guessed from board family similarity |
-| Display (JD9366 DSI) | not enabled | no upstream panel driver; video compiled out of U-Boot; see DTS comment + `output/migration-plan.md` |
+| Display (JD9366 DSI) | driver data recovered, U-Boot port pending | exact vendor DCS init extracted from the stock `lcd.ko` (panel driver `jd9366_8inch` = patched `lp079x01.c`), committed to `board/ga36-mb-v1.2/jd9366_init.h`; regenerable via `scripts/fw/recover-lcd-dcs.sh` (hash-pinned); fex says DSI video mode, 2 lanes, RGB888, dclk 30 MHz, ht 1040 / vt 518; clock model = mainline (360 MHz/lane, PLL3 360 MHz) |
 | Buildroot rootfs | postponed | existing external tree is RK3326/aarch64 scaffold; not yet migrated |
 
 Config bases: `sunxi_defconfig`/`A33-OLinuXino` with fex rail values

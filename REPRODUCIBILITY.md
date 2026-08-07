@@ -34,6 +34,7 @@ This project is now **fully reproducible** on any clean Linux machine (x86_64) w
 | eGON checksum script | `/mnt/c/Users/ricar/AppData/Local/Temp/opencode/egon_check.py` | `scripts/fw/helpers/egon_check.py` |
 | Header dumper | `/mnt/c/Users/ricar/AppData/Local/Temp/opencode/hdr.py` | `scripts/fw/helpers/hdr.py` |
 | FEX decode input | `/mnt/c/Users/ricar/AppData/Local/Temp/opencode/fs/fex-embedded.bin` | `extract/boot/fex-embedded.bin` |
+| Vendor LCD driver (analysis) | `work/squash/lcdroot/...` + ad-hoc scripts on this PC | `scripts/fw/recover-lcd-dcs.sh` + `scripts/fw/helpers/{lcd_dcs_extract.py,disasm_elf.py}`; committed DCS at `board/ga36-mb-v1.2/jd9366_init.h` |
 
 ---
 
@@ -79,6 +80,10 @@ This project is now **fully reproducible** on any clean Linux machine (x86_64) w
 | `bootstrap.sh` | Downloads all sources, toolchain, extracts to `work/` |
 | `scripts/fw/helpers/egon_check.py` | SPL eGON checksum validation (local copy) |
 | `scripts/fw/helpers/hdr.py` | Header dumper helper (local copy) |
+| `scripts/fw/recover-lcd-dcs.sh` | Regenerates the JD9366 DCS header from the read-only vendor image |
+| `scripts/fw/helpers/lcd_dcs_extract.py` | Walks the DCS table inside the vendor `lcd.ko` (self-contained ELF parser, hash-pinned) |
+| `scripts/fw/helpers/disasm_elf.py` | Capstone ARM disassembler for the vendor `lcd.ko` (no binutils needed) |
+| `board/ga36-mb-v1.2/jd9366_init.h` | Committed JD9366 8" DCS init sequence (the display port input) |
 | `REPRODUCIBILITY.md` | This report |
 
 ---
@@ -190,6 +195,41 @@ After `./build.sh` completes:
 
 ---
 
+## Vendor LCD driver recovery (DCS for the JD9366 8" panel)
+
+The display port needs the exact init sequence the vendor firmware sends to
+the JD9366 panel. That sequence is **committed** at
+`board/ga36-mb-v1.2/jd9366_init.h`, so the build never depends on it being
+re-extracted. If you ever need to re-derive it (or audit it against a fresh
+acquisition of the original SD media), run:
+
+```bash
+# Needs: the read-only original image (original/test.img), plus host tools
+# dd, debugfs (e2fsprogs), unsquashfs (squashfs-tools), python3.
+# sudo apt install e2fsprogs squashfs-tools python3   (Ubuntu/Debian)
+./scripts/fw/recover-lcd-dcs.sh
+```
+
+The script re-derives `board/ga36-mb-v1.2/jd9366_init.h` from
+`original/test.img` via the read-only partition chain (dd → debugfs → SYSTEM
+squashfs → `usr/lib/modules/lcd.ko` → DCS table). The `lcd.ko` sha256 is
+pinned, so a changed firmware stops the run with an error. Everything is
+relative to the repo root; nothing depends on a specific user account, home
+directory or machine.
+
+### Tooling notes
+
+- `scripts/fw/helpers/lcd_dcs_extract.py` — self-contained ELF parser (no
+  readelf) that locates `.data`, verifies the `jd9366_8inch` name string, and
+  walks the 72-byte `LCM_setting_table` entries (cmd@0, count@4 u32 — 0xff
+  end, 0xfe delay — para[64]@8).
+- `scripts/fw/helpers/disasm_elf.py` — capstone ARM disassembler for the
+  vendor module when no ARM binutils exist (`pip install capstone`).
+- These replace the ad-hoc `work/*.py` scratch scripts and are the only
+  analysis tooling that must be preserved.
+
+---
+
 ## Offline Build
 
 After the first run (with internet), all sources are cached in `work/dl/` and extracted in `work/src/`. `work/dl/` is the single download cache for both `bootstrap.sh` and Buildroot (`BR2_DL_DIR` exported by `scripts/fw/env.sh`), so Buildroot never re-downloads a source it already fetched. Subsequent builds work **completely offline**:
@@ -229,6 +269,10 @@ TOOLCHAIN_TARBALL="armv7-eabihf--glibc--stable-2025.08-1.tar.xz"
 # Buildroot's external toolchain: Bootlin 2024.05-1 (hash-pinned in Buildroot's
 # toolchain-external-bootlin.hash), selected in configs/ga36-mb-v1.2_defconfig
 ```
+
+The vendor `lcd.ko` (source of the DCS) is sha256-pinned inside
+`scripts/fw/helpers/lcd_dcs_extract.py` (`325e285f...a6fbc7`); a different
+firmware revision fails the extraction instead of silently changing the DCS.
 
 ---
 
