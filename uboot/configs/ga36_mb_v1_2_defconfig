@@ -2,23 +2,30 @@
 #
 # Base: upstream A33-OLinuXino_defconfig (2025.07), adjusted to the frozen
 # hardware spec (output/sys_config.fex, output/hardware-report.md):
-#   dram_clk=552, dram_zq=0xf777, dram_odt_en=1
 #   dcdc1=3300mV (VCC-3V3/MMC), dcdc2=1100mV (VCC-CPU), dcdc3=1260mV (VCC-SYS),
 #   dcdc5=1350mV (VCC-DRAM)
 # Debug console = UART2 (PB00/PB01) via stdout-path in the board DTS.
 #
-# NOTE (DRAM bring-up): 552 MHz and ZQ=63351 are the vendor values. If DRAM
-# training fails on hardware, first try CONFIG_DRAM_CLK=480/432 and/or
-# CONFIG_DRAM_ZQ=15291 (as used by A33-OLinuXino).
+# Bring-up revision (no UART available):
+#   * CONFIG_GA36_BACKLIGHT_BEACON turns the LCD backlight on in the SPL
+#     (before DRAM init) and blinks it in U-Boot proper, giving a visible
+#     boot-state indicator without a serial console.
+#   * DRAM lowered to the proven mainline A33 value (CLK=432, ZQ=15291 as
+#     used by A33-OLinuXino) until the vendor 552 MHz/ZQ=63351 values are
+#     validated on silicon. Raise it back once the board boots.
+#   * CONFIG_VIDEO removed: the stock RGB/LCD video path cannot drive the
+#     MIPI-DSI (JD9366) panel and only risks a silent hang.
 
 CONFIG_ARM=y
 CONFIG_ARCH_SUNXI=y
 CONFIG_DEFAULT_DEVICE_TREE="sun8i-a33-ga36-mb-v1.2"
 CONFIG_SPL=y
 CONFIG_MACH_SUN8I_A33=y
-CONFIG_DRAM_CLK=552
-CONFIG_DRAM_ZQ=63351
+CONFIG_DRAM_CLK=432
+CONFIG_DRAM_ZQ=15291
 CONFIG_DRAM_ODT_EN=y
+CONFIG_GA36_BACKLIGHT_BEACON=y
+# CONFIG_VIDEO_SUNXI is not set
 CONFIG_AXP_GPIO=y
 CONFIG_AXP_DCDC1_VOLT=3300
 CONFIG_AXP_DCDC2_VOLT=1100
@@ -36,13 +43,6 @@ CONFIG_CMD_MMC=y
 CONFIG_CMD_USB=y
 CONFIG_BOOTCOMMAND="echo == GA36 U-Boot ==; load mmc 0:1 0x41900000 /boot/boot.scr; source 0x41900000"
 CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x50
-CONFIG_VIDEO=y
-CONFIG_VIDEO_DE2=y
-CONFIG_VIDEO_SUNXI=y
-CONFIG_VIDEO_LCD_MODE="x:640,y:480,depth:24,pclk_khz:30000,le:120,ri:160,up:12,lo:40,hs:40,vs:6,sync:0,vmode:0"
-CONFIG_VIDEO_LCD_POWER="PH7"
-CONFIG_VIDEO_LCD_RESET="PH7"
-CONFIG_VIDEO_LCD_DCLK_PHASE=1
 CONFIG_SYS_SUNXI_UART=2
 # CONFIG_DEBUG_UART is not set
 # CONFIG_SPL_DISPLAY_PRINT is not set

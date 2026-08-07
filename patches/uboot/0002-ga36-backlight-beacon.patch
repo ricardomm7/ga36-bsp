@@ -1,0 +1,69 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH] 0002 ga36 backlight beacon
+
+Generated local patch for GA36-MB V1.2 (R36S) bring-up.
+
+---
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -186,12 +186,45 @@
+ 	return ENVL_UNKNOWN;
+ }
+ 
++#ifdef CONFIG_GA36_BACKLIGHT_BEACON
++/*
++ * GA36 backlight beacon (serial-free bring-up). PH00 of the PH bank
++ * drives the backlight enable; the rail is AXP DC1SW (LCD power).
++ */
++#define GA36_PIO_PH_BASE \
++	(SUNXI_PIO_BASE + SUNXI_GPIO_H * SUNXI_PINCTRL_BANK_SIZE)
++
++static void ga36_backlight_set(int on)
++{
++	u32 val = readl(GA36_PIO_PH_BASE + 0x10);
++
++	if (on)
++		val |= (1U << 0);
++	else
++		val &= ~(1U << 0);
++	writel(val, GA36_PIO_PH_BASE + 0x10);
++}
++#endif
++
+ /* called only from U-Boot proper */
+ int board_init(void)
+ {
+ 	__maybe_unused int id_pfr1, ret;
+ 
+ 	gd->bd->bi_boot_params = (PHYS_SDRAM_0 + 0x100);
++#ifdef CONFIG_GA36_BACKLIGHT_BEACON
++	/* Three blinks: DRAM and U-Boot proper are alive (no serial console). */
++	ga36_backlight_set(0);
++	mdelay(150);
++	ga36_backlight_set(1);
++	mdelay(150);
++	ga36_backlight_set(0);
++	mdelay(150);
++	ga36_backlight_set(1);
++	mdelay(150);
++	ga36_backlight_set(0);
++#endif
++
+ 
+ #if !defined(CONFIG_ARM64) && !defined(CONFIG_MACH_SUNIV)
+ 	asm volatile("mrc p15, 0, %0, c0, c1, 1" : "=r"(id_pfr1));
+@@ -630,6 +663,14 @@
+ 	power_failed |= axp_set_sw(IS_ENABLED(CONFIG_AXP_SW_ON));
+ #endif
+ #endif	/* CONFIG_AXPxxx_POWER */
++#ifdef CONFIG_GA36_BACKLIGHT_BEACON
++	/* Backlight ON before DRAM init: a hang at DRAM training leaves the
++	 * glow steady (no UART to read the failure). */
++	pmic_bus_setbits(0x12, (1U << 7));	/* AXP DC1SW: LCD power rail */
++	clrsetbits_le32(GA36_PIO_PH_BASE, 0xf, SUNXI_GPIO_OUTPUT);
++	ga36_backlight_set(1);
++#endif
++
+ 	printf("DRAM:");
+ 	gd->ram_size = sunxi_dram_init();
+ 	printf(" %d MiB\n", (int)(gd->ram_size >> 20));
