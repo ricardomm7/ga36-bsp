@@ -1,0 +1,45 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH] 0006 ga36 kconfig enable video MIPI DSI
+
+Enable MIPI DSI video stack for GA36-MB V1.2:
+- CONFIG_VIDEO_MIPI_DSI for MIPI DSI protocol
+- CONFIG_PANEL for panel framework
+- CONFIG_PANEL_JD9366 for our specific panel
+- CONFIG_VIDEO_SUNXI for sunxi video support
+- CONFIG_VIDEO_LOGO for U-Boot logo
+- CONFIG_VIDCONSOLE for video console
+
+---
+
+ arch/arm/mach-sunxi/Kconfig | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm/mach-sunxi/Kconfig b/arch/arm/mach-sunxi/Kconfig
+index xxxxxxx..yyyyyyy 100644
+--- a/arch/arm/mach-sunxi/Kconfig
++++ b/arch/arm/mach-sunxi/Kconfig
+@@ -468,6 +468,13 @@ config MACH_SUN8I_A33
+ 
+ config GA36_BACKLIGHT_BEACON
+ 	bool "GA36-MB backlight beacon (serial-free bring-up)"
+ 	help
+ 	  Lights the LCD backlight from the SPL before DRAM init and blinks
+ 	  it in U-Boot proper, so the board can signal its boot stage without
+ 	  a UART. Used for bring-up of the GA36-MB V1.2 (R36S) board.
+ 
++config GA36_MIPI_DSI
++	bool "GA36-MB MIPI DSI video output"
++	depends on MACH_SUN8I_A33
++	select VIDEO_MIPI_DSI
++	select PANEL
++	select PANEL_JD9366
++	select VIDEO_SUNXI
++	select VIDEO_LOGO
++	select VIDCONSOLE
++	help
++	  Enable MIPI DSI video output for the GA36-MB V1.2 board
++	  with the JD9366 8" panel.
++
+ # The sun8i SoCs share a lot, this helps to avoid a lot of "if A23 || A33"
+ config MACH_SUN8I
+ 	bool

@@ -1,0 +1,25 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH] 0003 ga36 add sunxi dsi base address
+
+Add SUNXI_DSI_BASE define for the Allwinner A33 MIPI DSI controller.
+The DSI controller sits at 0x01c24000, between SUNXI_SJTAG_BASE (0x01c23c00)
+and SUNXI_TP_BASE (0x01c25000).
+
+---
+
+ arch/arm/include/asm/arch-sunxi/cpu_sun4i.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h b/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
+index xxxxxxx..yyyyyyy 100644
+--- a/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
++++ b/arch/arm/include/asm/arch-sunxi/cpu_sun4i.h
+@@ -45,6 +45,8 @@
+ #define SUNXI_SJTAG_BASE		0x01c23c00
+ 
+ #define SUNXI_TP_BASE			0x01c25000
++#define SUNXI_DSI_BASE			0x01c24000
++
+ #define SUNXI_PMU_BASE			0x01c25400
+ 
+ #if defined CONFIG_MACH_SUN7I || defined CONFIG_MACH_SUN8I_R40
