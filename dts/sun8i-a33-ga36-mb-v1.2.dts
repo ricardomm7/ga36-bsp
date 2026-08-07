@@ -1,0 +1,278 @@
+/*
+ * GA36-MB V1.2 (R36S) — mainline kernel device tree
+ *
+ * Target: Linux v6.12, arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dts
+ * (installed by scripts/fw/build-linux.sh).
+ *
+ * Derived exclusively from the stock boot blob `fex-embedded.bin` (decoded by
+ * scripts/fex-decode.py, round-trip verified against sunxi-tools). Every
+ * enabled node is traced to a `used=1` entry in output/sys_config.fex; the
+ * board-specific GPIO/rail names are quoted in comments.
+ *
+ * Status: DRAFT. Values are the firmware's, not yet validated on silicon.
+ * Validation gates are listed in output/migration-plan.md.
+ */
+
+/dts-v1/;
+#include "sun8i-a33.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pwm/pwm.h>
+
+/ {
+	model = "GA36-MB V1.2 (R36S)";
+	compatible = "ga36-mb-v1.2","allwinner,sun8i-a33";
+
+	aliases {
+		serial1 = &uart1;
+		serial2 = &uart2;
+	};
+
+	chosen {
+		stdout-path = "serial2:115200n8";
+	};
+
+	/*
+	 * No /memory node: the RAM size (2x DDR3, 512 MiB each = 1 GiB per
+	 * R36S spec; unconfirmed on this unit) is patched by U-Boot.
+	 */
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		/* fex [lcd0]: lcd_pwm_used=1, pwm_freq=20000 Hz, pol=0 (normal) */
+		pwms = <&pwm 0 50000 0>;
+		brightness-levels = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+				     17 18 19 20 21 22 23 24 25 26 27 28 29 30
+				     31 32 33 34 35 36 37 38 39 40 41 42 43 44
+				     45 46 47 48 49 50 51 52 53 54 55 56 57 58
+				     59 60 61 62 63 64 65 66 67 68 69 70 71 72
+				     73 74 75 76 77 78 79 80 81 82 83 84 85 86
+				     87 88 89 90 91 92 93 94 95 96 97 98 99 100>;
+		default-brightness-level = <30>;
+		/* fex [lcd0]: lcd_power = "axp22_dc1sw" */
+		power-supply = <&reg_dc1sw>;
+	};
+
+	panel: panel {
+		compatible = "simple-panel";
+		power-supply = <&reg_dc1sw>;
+		reset-gpios = <&pio 7 7 GPIO_ACTIVE_LOW>; /* PH07 */
+		port {
+			panel_in_tcon0: endpoint {
+				remote-endpoint = <&tcon0_out_rgb>;
+			};
+		};
+	};
+
+	/* fex [audio]: audio_used=1, audio_pa_ctrl = PH09<1> (gpio_out, data=1) */
+	speaker_amp: speaker-amplifier {
+		compatible = "simple-audio-amplifier";
+		enable-gpios = <&pio 1 9 GPIO_ACTIVE_HIGH>;
+		sound-name-prefix = "Speaker";
+	};
+
+	/*
+	 * Input: the fex has no button/analog node (fex `gpio_para`
+	 * PH01/PH02/PH03/PL04/PG13 is an SDK placeholder, not the keys).
+	 * The R36S controls are wired to unmapped GPIOs; the mapping must be
+	 * measured on the board — do NOT guess. See migration-plan.md §input.
+	 */
+};
+
+&mmc0 {
+	/* fex [sdc0]: sdc_used=1, PF00-05 (mmc0), sdc_det = PB04, sdc_power_supply = "axp22_dcdc1" */
+	vmmc-supply = <&reg_dcdc1>;
+	bus-width = <4>;
+	cd-gpios = <&pio 1 4 GPIO_ACTIVE_LOW>; /* PB04 */
+	status = "okay";
+};
+
+/* eMMC (mmc2, PC) and SDIO WiFi (mmc1, PG) are disabled footprints in the
+ * stock blob (sdc_used=0) — left disabled here on purpose. */
+
+&uart1 {
+	/* fex [uart1]: uart_used=1, PG06-09 mux 2 */
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_pg_pins>, <&uart1_cts_rts_pg_pins>;
+	status = "okay";
+};
+
+&uart2 {
+	/* fex [uart_para]: uart_debug_port=2, PB00<2>/PB01<2> — debug console */
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pb_pins>;
+	status = "okay";
+};
+
+&pio {
+	/*
+	 * PB0/PB1 function "uart2" is mux 0x2 in the sun8i-a33 pinctrl driver,
+	 * matching the fex `port:PB00<2>`. Not in the SoC dtsi, so defined here.
+	 */
+	uart2_pb_pins: uart2-pb-pins {
+		pins = "PB0", "PB1";
+		function = "uart2";
+	};
+};
+
+&r_rsb {
+	/* fex [pmu_sply]: pmu_used=1, s_rsb0 on PL00/PL01 */
+	status = "okay";
+
+	axp22x: pmic@3a3 {
+		compatible = "x-powers,axp223";
+		reg = <0x3a3>;
+		interrupt-parent = <&r_intc>;
+		interrupts = <GIC_SPI 32 IRQ_TYPE_LEVEL_LOW>;
+		eldoin-supply = <&reg_dcdc1>;
+		x-powers,drive-vbus-en;
+	};
+};
+
+#include "axp223.dtsi"
+
+&ac_power_supply {
+	status = "okay";
+};
+
+&battery_power_supply {
+	status = "okay";
+};
+
+/*
+ * Rails are set to the values programmed by the stock firmware
+ * (fex [power_sply]) and marked always-on for the core rails. Before mass
+ * production / first bring-up, verify actual AXP register state and rail
+ * voltages with a multimeter (migration-plan.md §power).
+ */
+
+&reg_dcdc1 {
+	regulator-always-on;
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	regulator-name = "vcc-3v3";
+};
+
+&reg_dcdc2 {
+	regulator-always-on;
+	regulator-min-microvolt = <1100000>;
+	regulator-max-microvolt = <1100000>;
+	regulator-name = "vdd-sys";
+};
+
+&reg_dcdc3 {
+	regulator-always-on;
+	regulator-min-microvolt = <1260000>;
+	regulator-max-microvolt = <1260000>;
+	regulator-name = "vdd-cpu";
+};
+
+&reg_dcdc5 {
+	regulator-always-on;
+	regulator-min-microvolt = <1350000>;
+	regulator-max-microvolt = <1350000>;
+	regulator-name = "vcc-dram";
+};
+
+&reg_aldo2 {
+	regulator-always-on;
+	regulator-min-microvolt = <2500000>;
+	regulator-max-microvolt = <2500000>;
+	regulator-name = "vdd-dll";
+};
+
+&reg_aldo3 {
+	regulator-always-on;
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+	regulator-name = "vcc-avcc";
+};
+
+&reg_dc1sw {
+	regulator-name = "vcc-lcd";
+};
+
+&reg_drivevbus {
+	regulator-name = "usb0-vbus";
+	status = "okay";
+};
+
+&codec {
+	status = "okay";
+};
+
+&dai {
+	status = "okay";
+};
+
+&sound {
+	simple-audio-card,name = "ga36-mb-a33-audio";
+	simple-audio-card,aux-devs = <&codec_analog>, <&speaker_amp>;
+	simple-audio-card,widgets =
+		"Headphone", "Headphone Jack",
+		"Speaker", "Speaker";
+	simple-audio-card,routing =
+		"Left DAC", "DACL",
+		"Right DAC", "DACR",
+		"Headphone", "HP",
+		"Speaker", "HP";
+	status = "okay";
+};
+
+&usb_otg {
+	/* fex [usbc0]: usb_used=1, port_type 2 (OTG), usb_id_gpio = PH08 */
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&usb_power_supply {
+	status = "okay";
+};
+
+&usbphy {
+	/* fex: usb_vbus_det = "axp_ctrl", usb_vbus_drv = "port:power4" */
+	usb0_id_det-gpios = <&pio 1 8 GPIO_ACTIVE_HIGH>; /* PH08 */
+	usb0_vbus_power-supply = <&usb_power_supply>;
+	usb0_vbus-supply = <&reg_drivevbus>;
+	status = "okay";
+};
+
+&pwm {
+	/* fex [lcd0]: pwm_positive = PH00<2> — pwm0 channel 0 */
+	status = "okay";
+};
+
+/*
+ * Display — ENABLED per fex [lcd0]:
+ *   lcd_if=4 (RGB parallel), lcd_x=640, lcd_y=480, lcd_dclk_freq=30000
+ *   hbp=120 ht=1040 hspw=40
+ *   vbp=12 vt=518 vspw=6
+ *   lcd_gpio_0 = PH07 (panel reset), power = axp22_dc1sw
+ * Using panel-simple with RGB interface (TCON0 output 0).
+ */
+
+&de {
+	status = "okay";
+};
+
+&tcon0 {
+	status = "okay";
+};
+
+&tcon0_out {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	tcon0_out_rgb: endpoint@0 {
+		reg = <0>;
+		remote-endpoint = <&panel_in_tcon0>;
+	};
+};
+
+&dsi {
+	status = "disabled";
+};
+
+&dphy {
+	status = "disabled";
+};

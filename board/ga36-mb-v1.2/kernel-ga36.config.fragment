@@ -1,0 +1,14 @@
+# Kernel config fragment — merged on top of sunxi_defconfig (v6.12).
+# Boot-relevant options for the GA36 initramfs SD image.
+#
+# The merged result is canonicalized with `make savedefconfig` into
+# board/ga36-mb-v1.2/linux-ga36.config (the stored, reproducible config).
+
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_EXT4_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_CMDLINE="console=ttyS2,115200n8 root=/dev/ram0 rw panic=10"
+CONFIG_GPIO_SYSFS=y
+CONFIG_PANIC_TIMEOUT=10

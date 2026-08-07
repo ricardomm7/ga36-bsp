@@ -1,0 +1,14 @@
+/test.img
+/original/test.img
+/extract/**
+!/extract/.gitkeep
+/logs/**
+!/logs/.gitkeep
+/output/**
+!/output/.gitkeep
+/work/**
+!/work/.gitkeep
+/images/**
+!/images/.gitkeep
+/buildroot/buildroot/
+/dl/

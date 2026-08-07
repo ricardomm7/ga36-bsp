@@ -1,0 +1,32 @@
+# GA36-MB V1.2 (R36S) — Allwinner A33 (sun8iw5), sunxi mainline
+# Migrated from the original RK3326/aarch64 scaffolding after the fex decode
+# proved the board is an A33. Kernel DTS lives at
+# output/ga36-mb-v1.2.dts -> arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dts
+# (delivered via BR2_LINUX_KERNEL_PATCH; see output/migration-plan.md).
+BR2_arm=y
+BR2_cortex_a7=y
+# Prebuilt Bootlin external toolchain (glibc, armv7-eabihf). glibc cannot be
+# built from source on a case-insensitive filesystem (/mnt/c = NTFS), so we use
+# the bootlin toolchain Buildroot 2025.02.1 ships and hash-pins (2024.05-1,
+# kernel headers 6.6; tarball cached in work/dl).
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_ARMV7_EABIHF_GLIBC_STABLE=y
+BR2_KERNEL_HEADERS_6_6=y
+BR2_SYSTEM_DHCP="eth0 usb0"
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_GA36_PATH)/../board/ga36-mb-v1.2/rootfs-overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="$(BR2_EXTERNAL_GA36_PATH)/../board/ga36-mb-v1.2/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_GA36_PATH)/../board/ga36-mb-v1.2/post-image.sh"
+# Kernel built separately
+BR2_PACKAGE_RETROARCH=y
+BR2_PACKAGE_EMULATIONSTATION=y
+BR2_PACKAGE_ALSA_UTILS=y
+BR2_PACKAGE_EVTEST=y
+BR2_PACKAGE_LIBDRM=y
+BR2_PACKAGE_MESA3D=y
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_LIMA=y
+BR2_TARGET_GENERIC_GETTY_PORT="ttyS2"
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+BR2_TARGET_ROOTFS_EXT2_SIZE="384M"
+BR2_PACKAGE_HOST_GENIMAGE=y
