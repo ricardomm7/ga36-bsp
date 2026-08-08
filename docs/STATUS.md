@@ -14,17 +14,21 @@ Target: GA36-MB V1.2 (R36S), Allwinner A33. The recovered fex
 | Linux 6.12.41 | built | `scripts/fw/build-linux.sh`, `dts/sun8i-a33-ga36-mb-v1.2.dts`, saved `board/ga36-mb-v1.2/linux-ga36.config` |
 | Initramfs (static BusyBox) | built | `scripts/fw/build-initramfs.sh`, getty on ttyS2 |
 | Bootable SD image | built | `scripts/fw/package-final.sh`, `output/firmware/ga36-custom.img` (SPL @ LBA16, U-Boot @ LBA80, ext4 @ LBA2048) |
-| Backlight beacon (serial-free status) | implemented, awaiting hardware test | `patches/uboot/0002-ga36-backlight-beacon.patch` lights DC1SW + PH00 in the SPL before DRAM init and blinks 3× in U-Boot proper |
-| First hardware boot | pending | flash `ga36-custom.img`, observe beacon: no glow / steady glow (DRAM hang) / 3 blinks (U-Boot OK) |
+| Backlight beacon (serial-free status) | implemented, **2 blinks confirmed on silicon** | `patches/uboot/0002-ga36-backlight-beacon.patch` lights DC1SW + PH00 in the SPL after DRAM init and blinks 2× right after `sunxi_dram_init()` in `sunxi_board_init` |
+| First hardware boot | **2 blinks (DRAM OK)** | flash `output/firmware/ga36-custom.img`, observe beacon: no glow (pre-DRAM death) / steady glow (DRAM hang) / 2 blinks (DRAM OK, SPL alive) |
 | Serial console milestone | blocked | UART2 (PB00/PB01) wiring unverified on this revision; beacon replaces it for now |
 | OTG / SD2 / FN bindings | intentionally unassigned | must never be guessed from board family similarity |
 | Display (JD9366 DSI) | driver data recovered, U-Boot port pending | exact vendor DCS init extracted from the stock `lcd.ko` (panel driver `jd9366_8inch` = patched `lp079x01.c`), committed to `board/ga36-mb-v1.2/jd9366_init.h`; regenerable via `scripts/fw/recover-lcd-dcs.sh` (hash-pinned); fex says DSI video mode, 2 lanes, RGB888, dclk 30 MHz, ht 1040 / vt 518; clock model = mainline (360 MHz/lane, PLL3 360 MHz) |
 | Buildroot rootfs | postponed | existing external tree is RK3326/aarch64 scaffold; not yet migrated |
 
 Config bases: `sunxi_defconfig`/`A33-OLinuXino` with fex rail values
-(DCDC1/2/3/5 = 3.3/1.1/1.26/1.35 V). DRAM is at the proven mainline A33
-values (432 MHz, ZQ 15291); the vendor 552 MHz / ZQ 0xf777 is queued to
-validate once the board boots.
+(DCDC1/2/3/5 = 3.3/1.1/1.26/1.35 V). DRAM is forced to the factory values
+(552 MHz, ZQ 63351) with timing parameters and mode registers extracted from
+the stock boot0 (`patches/uboot/0008`), PLL5 forced (`0007`), and size
+autodetect disabled. The factory eGON header carries `dram_clk=552`,
+`dram_zq=0xf777`, `mr0=0x1a50`, `mr1=0x4`, `mr2=0x10`, `mr3=0x0`,
+`tpr0=0x2ab83def`, `tpr1=0x18082356`, `tpr2=0x34156` — the SPL mirrors
+those values exactly (this is the configuration that produced 2 blinks).
 
 Build pipeline (run in order): `build-uboot.sh` → `build-linux.sh` →
 `build-initramfs.sh` → `package-final.sh`. Artifacts land in `output/firmware/`.
