@@ -10,11 +10,11 @@
 #   * CONFIG_GA36_BACKLIGHT_BEACON turns the LCD backlight on in the SPL
 #     (before DRAM init) and blinks it in U-Boot proper, giving a visible
 #     boot-state indicator without a serial console.
-#   * CONFIG_GA36_MIPI_DSI enables raw-register MIPI DSI video output for
-#     the JD9366 640x480 panel (TCON0→DSI→DPHY pipeline).
-#   * DRAM lowered to the proven mainline A33 value (CLK=432, ZQ=15291 as
-#     used by A33-OLinuXino) until the vendor 552 MHz/ZQ=63351 values are
-#     validated on silicon.
+#   * MIPI DSI video output is NOT enabled: the raw-register JD9366 driver
+#     experiment was reverted. Re-enable only after the vendor lcd.ko/boot0
+#     timings are extracted and validated on silicon.
+#   * DRAM forced to the factory values (CLK=552, ZQ=63351, ODT, TPR from
+#     the stock boot0) — the configuration that produces the 2-blink beacon.
 
 CONFIG_ARM=y
 CONFIG_ARCH_SUNXI=y
@@ -25,7 +25,6 @@ CONFIG_DRAM_CLK=552
 CONFIG_DRAM_ZQ=63351
 CONFIG_DRAM_ODT_EN=y
 CONFIG_GA36_BACKLIGHT_BEACON=y
-CONFIG_GA36_MIPI_DSI=y
 CONFIG_AXP_GPIO=y
 CONFIG_AXP_DCDC1_VOLT=3300
 CONFIG_REGULATOR_AXP_DRIVEVBUS=y
