@@ -1,0 +1,25 @@
+From: GA36 FW <ga36@localhost>
+Subject: [PATCH] 0007 ga36 force pll ddr0
+
+Use PLL5 (PLL_DDR0) instead of PLL11 (PLL_DDR1) for DRAM initialization.
+The vendor boot0 uses PLL_DDR0. On the specific GA36-MB V1.2 silicon,
+PLL11 appears to be unstable or defective, causing a hard fault during
+DRAM initialization in the SPL.
+
+---
+--- a/arch/arm/mach-sunxi/dram_sun8i_a33.c
++++ b/arch/arm/mach-sunxi/dram_sun8i_a33.c
+@@ -302,10 +302,10 @@
+ 			(struct sunxi_mctl_com_reg *)SUNXI_DRAM_COM_BASE;
+ 
+ 	clrsetbits_le32(&ccm->dram_pll_cfg, CCM_DRAMPLL_CFG_SRC_MASK,
+-			CCM_DRAMPLL_CFG_SRC_PLL11);
++			CCM_DRAMPLL_CFG_SRC_PLL5);
+ 
+-	clock_set_pll11(CONFIG_DRAM_CLK * 1000000 * DRAM_CLK_MUL,
+-			DRAM_SIGMA_DELTA_ENABLE);
++	clock_set_pll5(CONFIG_DRAM_CLK * 1000000 * DRAM_CLK_MUL,
++		       DRAM_SIGMA_DELTA_ENABLE);
+ 
+ 	clrsetbits_le32(&ccm->dram_clk_cfg, CCM_DRAMCLK_CFG_DIV_MASK,
+ 			CCM_DRAMCLK_CFG_DIV(DRAM_CLK_DIV) |
