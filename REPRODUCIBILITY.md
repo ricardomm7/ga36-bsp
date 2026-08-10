@@ -159,7 +159,7 @@ cd my-image
 ./build.sh
 
 # 4. Flash to SD card
-sudo dd if=output/ga36-custom.img of=/dev/sdX bs=1M status=progress
+sudo dd if=output/firmware/ga36-custom.img of=/dev/sdX bs=1M status=progress
 ```
 
 ### Prerequisites (Host System)
@@ -184,7 +184,7 @@ After `./build.sh` completes:
 
 ```bash
 # Verify image structure
-./scripts/fw/validate-image.sh output/ga36-custom.img
+./scripts/fw/validate-image.sh output/firmware/ga36-custom.img
 
 # Expected output:
 # - SPL eGON checksum: VALID
@@ -286,7 +286,7 @@ firmware revision fails the extraction instead of silently changing the DCS.
 - [x] Build works offline after first run
 - [x] Single command build: `./build.sh`
 - [x] Single command setup: `./bootstrap.sh`
-- [x] Final image at `output/ga36-custom.img`
+- [x] Final image at `output/firmware/ga36-custom.img`
 
 ---
 

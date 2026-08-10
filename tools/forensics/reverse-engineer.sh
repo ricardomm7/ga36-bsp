@@ -2,7 +2,7 @@
 # Complete, read-only forensic acquisition of the vendor SD image.
 set -euo pipefail
 cd "$(dirname "$0")"
-source scripts/common.sh
+source ../../scripts/common.sh
 need_original
 BASE="$EXTRACT/forensics"
 PARTS="$BASE/partitions"

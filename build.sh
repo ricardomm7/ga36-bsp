@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # GA36-MB V1.2 (R36S) — Complete firmware build script
-# Produces: output/ga36-custom.img
-# Allwinner A33 sun8i, U-Boot 2025.07, Linux 6.12, Buildroot
+# Single entry point. Produces BOTH images from one ./build.sh:
+#   output/firmware/ga36-custom.img      (Route B: mainline SPL+U-Boot)
+#   output/firmware/ga36-stockboot.img   (Route A: stock bootloader + our kernel)
+# Allwinner A33 sun8i, U-Boot 2025.07, Linux 6.12, Buildroot.
 #
 # Usage: ./build.sh [--clean]
 #   --clean: clean all build directories before building
+#
+# Route A additionally needs the factory dump original/test.img (gitignored —
+# it is YOUR card's acquisition, see original/README.md). If it is missing the
+# stock image is skipped with a warning; ga36-custom.img is still built.
 
 set -euo pipefail
 
@@ -42,23 +48,33 @@ main() {
     fi
 
     # Build order: U-Boot -> Linux -> Initramfs -> Buildroot -> Package SD
-    log_info "=== Step 1/5: Building U-Boot 2025.07 ==="
+    log_info "=== Step 1/6: Building U-Boot 2025.07 ==="
     "$ROOT_DIR/scripts/fw/build-uboot.sh"
 
-    log_info "=== Step 2/5: Building Linux 6.12.41 ==="
+    log_info "=== Step 2/6: Building Linux 6.12.41 ==="
     "$ROOT_DIR/scripts/fw/build-linux.sh"
 
-    log_info "=== Step 3/5: Building initramfs ==="
+    log_info "=== Step 3/6: Building initramfs ==="
     "$ROOT_DIR/scripts/fw/build-initramfs.sh"
 
-    log_info "=== Step 4/5: Building Buildroot rootfs ==="
+    log_info "=== Step 4/6: Building Buildroot rootfs ==="
     "$ROOT_DIR/scripts/fw/build-buildroot.sh"
 
-    log_info "=== Step 5/5: Packaging final SD image ==="
+    log_info "=== Step 5/6: Packaging final SD image ==="
     "$ROOT_DIR/scripts/fw/package-final.sh"
 
+    log_info "=== Step 6/6: Packaging stock-bootloader image (Route A) ==="
+    if [ -f "$ROOT_DIR/original/test.img" ]; then
+        "$ROOT_DIR/scripts/fw/package-stock.sh"
+    else
+        log_warn "original/test.img missing — skipping ga36-stockboot.img"
+        log_warn "  (add your factory dump to original/test.img; it is gitignored,"
+        log_warn "  see original/README.md)"
+    fi
+
     log_info "Build complete!"
-    log_info "Final image: $FW_OUT/ga36-custom.img"
+    log_info "Route B (mainline U-Boot): $FW_OUT/ga36-custom.img"
+    log_info "Route A (stock bootloader + our kernel): $FW_OUT/ga36-stockboot.img"
     log_info "Flash with: sudo dd if=$FW_OUT/ga36-custom.img of=/dev/sdX bs=1M status=progress"
 }
 

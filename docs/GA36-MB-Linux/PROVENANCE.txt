@@ -1,0 +1,1 @@
+Vendored reference: https://github.com/CodeZombie/GA36-MB-Linux.git (commit e5353dc6f3929e19a89b28d6510465a1e069b91e, 2026-08-04). Community GA36-MB driver + DTS; the plumbing of board/ga36-mb-v1.2/jd9366-ga36mbv1-2.c is derived from jd9366-ga36mbv1-2.c here. Kept as plain files for offline reproducibility.

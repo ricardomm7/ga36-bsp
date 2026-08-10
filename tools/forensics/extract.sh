@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-source scripts/common.sh
+source ../../scripts/common.sh
 need_original
 mkdir -p "$EXTRACT"/{partitions,boot,binwalk,dtb,analysis} "$LOGS"
 before="$(stat -c '%s:%Y' "$ORIGINAL")"

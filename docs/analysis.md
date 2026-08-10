@@ -5,7 +5,7 @@ Generated: 2026-08-05T21:29:09Z
 ## Source integrity
 
 size=15634268160 bytes; mtime=2026-08-05 12:03:37.717225300 +0100
-SHA256 not calculated (run VERIFY_FULL_HASH=1 ./extract.sh).
+SHA256 not calculated (run VERIFY_FULL_HASH=1 tools/forensics/extract.sh).
 
 ## Partition table
 

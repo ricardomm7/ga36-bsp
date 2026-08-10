@@ -1,14 +1,26 @@
 # Kernel config fragment — merged on top of sunxi_defconfig (v6.12).
-# Boot-relevant options for the GA36 initramfs SD image.
+# Route A: boots from the STOCK sunxi bootloader via an Android boot image
+# (kernel + appended DTB), so the cmdline is FORCED here (the stock
+# bootloader's own bootargs are ignored). Root is the ext4 partition at
+# 128 MiB (mmcblk0p1), matching docs/GA36-MB-Linux packaging.
 #
 # The merged result is canonicalized with `make savedefconfig` into
 # board/ga36-mb-v1.2/linux-ga36.config (the stored, reproducible config).
 
+CONFIG_ARM_APPENDED_DTB=y
+CONFIG_ARM_ATAG_DTB_COMPAT=y
+CONFIG_CMDLINE="console=ttyS2,115200n8 root=/dev/mmcblk0p1 rootfstype=ext4 rootwait rw init=/sbin/init coherent_pool=4m boot_type=1 config_size=0 earlycon=uart,mmio32,0x01c28800 loglevel=8 panic=10"
+CONFIG_CMDLINE_FORCE=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_DEVTMPFS=y
 CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_EXT4_FS=y
 CONFIG_VFAT_FS=y
-CONFIG_CMDLINE="console=ttyS2,115200n8 root=/dev/ram0 rw panic=10"
 CONFIG_GPIO_SYSFS=y
 CONFIG_PANIC_TIMEOUT=10
+CONFIG_DRM_MIPI_DSI=y
+CONFIG_DRM_SUN6I_DSI=y
+CONFIG_DRM_PANEL_JD9366=y
+CONFIG_FB=y
+CONFIG_DRM_FBDEV_EMULATION=y
+CONFIG_FRAMEBUFFER_CONSOLE=y

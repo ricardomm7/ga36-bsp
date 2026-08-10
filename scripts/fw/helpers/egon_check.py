@@ -12,7 +12,10 @@ def egon_check(data, off):
     stored = struct.unpack_from('<I', data, off + 0x0c)[0]
     return stored, calc
 
-img = open(sys.argv[1], 'rb').read()
+# Read only the first 4 MiB (covers boot0/boot1/SPL headers); the source
+# images can be tens of GB and must not be slurped into RAM.
+with open(sys.argv[1], 'rb') as _f:
+    img = _f.read(4 * 1024 * 1024)
 for label, off in (('OUR SPL @LBA16', 16*512),
                    ('VENDOR boot0 @LBA16', 16*512)):
     stored, calc = egon_check(img, off)

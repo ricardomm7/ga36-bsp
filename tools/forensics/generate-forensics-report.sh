@@ -2,7 +2,7 @@
 # Produces a factual report from reverse-engineer.sh outputs. No source image IO.
 set -euo pipefail
 cd "$(dirname "$0")"
-source scripts/common.sh
+source ../../scripts/common.sh
 BASE="$EXTRACT/forensics"
 REPORT="$BASE/reports"
 [ -d "$BASE" ] || { echo 'Run ./reverse-engineer.sh first.' >&2; exit 2; }

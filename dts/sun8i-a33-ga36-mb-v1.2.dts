@@ -10,7 +10,7 @@
  * board-specific GPIO/rail names are quoted in comments.
  *
  * Status: DRAFT. Values are the firmware's, not yet validated on silicon.
- * Validation gates are listed in output/migration-plan.md.
+ * Validation gates are listed in docs/migration-plan.md.
  */
 
 /dts-v1/;
@@ -48,20 +48,9 @@
 				     59 60 61 62 63 64 65 66 67 68 69 70 71 72
 				     73 74 75 76 77 78 79 80 81 82 83 84 85 86
 				     87 88 89 90 91 92 93 94 95 96 97 98 99 100>;
-		default-brightness-level = <30>;
+		default-brightness-level = <50>;	/* fex lcd0_bright = 50 */
 		/* fex [lcd0]: lcd_power = "axp22_dc1sw" */
 		power-supply = <&reg_dc1sw>;
-	};
-
-	panel: panel {
-		compatible = "simple-panel";
-		power-supply = <&reg_dc1sw>;
-		reset-gpios = <&pio 7 7 GPIO_ACTIVE_LOW>; /* PH07 */
-		port {
-			panel_in_tcon0: endpoint {
-				remote-endpoint = <&tcon0_out_rgb>;
-			};
-		};
 	};
 
 	/* fex [audio]: audio_used=1, audio_pa_ctrl = PH09<1> (gpio_out, data=1) */
@@ -75,7 +64,7 @@
 	 * Input: the fex has no button/analog node (fex `gpio_para`
 	 * PH01/PH02/PH03/PL04/PG13 is an SDK placeholder, not the keys).
 	 * The R36S controls are wired to unmapped GPIOs; the mapping must be
-	 * measured on the board — do NOT guess. See migration-plan.md §input.
+	 * measured on the board — do NOT guess. See docs/migration-plan.md §input.
 	 */
 };
 
@@ -143,7 +132,7 @@
  * Rails are set to the values programmed by the stock firmware
  * (fex [power_sply]) and marked always-on for the core rails. Before mass
  * production / first bring-up, verify actual AXP register state and rail
- * voltages with a multimeter (migration-plan.md §power).
+ * voltages with a multimeter (docs/migration-plan.md §power).
  */
 
 &reg_dcdc1 {
@@ -189,7 +178,15 @@
 };
 
 &reg_dc1sw {
+	regulator-always-on;
 	regulator-name = "vcc-lcd";
+};
+
+&reg_dldo3 {
+	regulator-always-on;
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+	regulator-name = "vcc-dsi";
 };
 
 &reg_drivevbus {
@@ -239,16 +236,22 @@
 
 &pwm {
 	/* fex [lcd0]: pwm_positive = PH00<2> — pwm0 channel 0 */
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm0_pin>;
 	status = "okay";
 };
 
 /*
  * Display — ENABLED per fex [lcd0]:
- *   lcd_if=4 (RGB parallel), lcd_x=640, lcd_y=480, lcd_dclk_freq=30000
+ *   lcd_driver_name = "jd9366_8inch" (MIPI-DSI, lcd_dsi_if=2, lcd_dsi_lane=2,
+ *   lcd_dsi_format=0 = RGB888, lcd_dsi_te=0)
+ *   lcd_x=640, lcd_y=480, lcd_dclk_freq=30 MHz
  *   hbp=120 ht=1040 hspw=40
  *   vbp=12 vt=518 vspw=6
  *   lcd_gpio_0 = PH07 (panel reset), power = axp22_dc1sw
- * Using panel-simple with RGB interface (TCON0 output 0).
+ * Panel: JD9366 (compatible "boe,jd9366"), driven by
+ * board/ga36-mb-v1.2/jd9366-ga36mbv1-2.c. Init DCS is hash-pinned to the
+ * vendor lcd.ko via board/ga36-mb-v1.2/jd9366_init.h (see REPRODUCIBILITY.md).
  */
 
 &de {
@@ -259,20 +262,20 @@
 	status = "okay";
 };
 
-&tcon0_out {
-	#address-cells = <1>;
-	#size-cells = <0>;
+&dsi {
+	status = "okay";
+	vcc-dsi-supply = <&reg_dldo3>;
 
-	tcon0_out_rgb: endpoint@0 {
+	panel@0 {
+		compatible = "boe,jd9366";
 		reg = <0>;
-		remote-endpoint = <&panel_in_tcon0>;
+		power-supply = <&reg_dc1sw>;	/* fex: lcd_power = axp22_dc1sw */
+		reset-gpios = <&pio 7 7 GPIO_ACTIVE_LOW>; /* fex lcd_gpio_0 = PH07 */
+		backlight = <&backlight>;
 	};
 };
 
-&dsi {
-	status = "disabled";
-};
-
 &dphy {
-	status = "disabled";
+	status = "okay";
+	vcc-supply = <&reg_dldo3>;
 };

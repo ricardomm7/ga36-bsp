@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-source scripts/common.sh
+source ../../scripts/common.sh
 need_original
 mkdir -p "$EXTRACT/analysis" "$ROOT/docs"
 if [ ! -f "$EXTRACT/analysis/fdisk.txt" ]; then ./extract.sh; fi

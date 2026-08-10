@@ -158,7 +158,7 @@ main() {
     log_info ""
     log_info "Next steps:"
     log_info "  1. Run ./build.sh to build the complete firmware"
-    log_info "  2. Flash the resulting image: sudo dd if=output/ga36-custom.img of=/dev/sdX bs=1M status=progress"
+    log_info "  2. Flash the resulting image: sudo dd if=output/firmware/ga36-custom.img of=/dev/sdX bs=1M status=progress"
 }
 
 main "$@"

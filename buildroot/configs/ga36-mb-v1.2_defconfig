@@ -2,7 +2,7 @@
 # Migrated from the original RK3326/aarch64 scaffolding after the fex decode
 # proved the board is an A33. Kernel DTS lives at
 # output/ga36-mb-v1.2.dts -> arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dts
-# (delivered via BR2_LINUX_KERNEL_PATCH; see output/migration-plan.md).
+# (delivered via BR2_LINUX_KERNEL_PATCH; see docs/migration-plan.md).
 BR2_arm=y
 BR2_cortex_a7=y
 # Prebuilt Bootlin external toolchain (glibc, armv7-eabihf). glibc cannot be

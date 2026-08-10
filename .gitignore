@@ -10,5 +10,11 @@
 !/work/.gitkeep
 /images/**
 !/images/.gitkeep
+/mnt_p2/*
+!/mnt_p2/.gitkeep
 /buildroot/buildroot/
 /dl/
+
+# Python bytecode
+__pycache__/
+*.pyc

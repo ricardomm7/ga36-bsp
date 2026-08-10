@@ -7,9 +7,10 @@
 # Debug console = UART2 (PB00/PB01) via stdout-path in the board DTS.
 #
 # Bring-up revision:
-#   * CONFIG_GA36_BACKLIGHT_BEACON turns the LCD backlight on in the SPL
-#     (before DRAM init) and blinks it in U-Boot proper, giving a visible
-#     boot-state indicator without a serial console.
+#   * CONFIG_GA36_BACKLIGHT_BEACON enables the serial-free boot checkpoints:
+#     the LCD backlight (LED1 on PH00) blinks 2 = SPL DRAM OK, 3 = U-Boot
+#     proper board_init(), 4 = misc_init_r(), fast blink = failure. See
+#     patches/uboot/0009 and docs/STATUS.md (Beacon protocol).
 #   * MIPI DSI video output is NOT enabled: the raw-register JD9366 driver
 #     experiment was reverted. Re-enable only after the vendor lcd.ko/boot0
 #     timings are extracted and validated on silicon.
@@ -45,6 +46,11 @@ CONFIG_SYS_WHITE_ON_BLACK=y
 # CONFIG_VIDEO_SUNXI is not set
 CONFIG_BOOTCOMMAND="echo == GA36 U-Boot ==; load mmc 0:1 0x41900000 /boot/boot.scr; source 0x41900000"
 CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x50
+# The sunxi default DATA_PART_OFFSET=0x10 shifts the SPL's U-Boot read from
+# LBA 0x50 to 0x60, but with-spl.bin places U-Boot at file 0x8000 (LBA 0x50
+# once written at LBA 16). The offset is for eMMC hardware-boot partitions,
+# not SD cards, so force it to 0 (see docs/STATUS.md).
+CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_DATA_PART_OFFSET=0
 CONFIG_SYS_SUNXI_UART=2
 # CONFIG_DEBUG_UART is not set
 # CONFIG_SPL_DISPLAY_PRINT is not set

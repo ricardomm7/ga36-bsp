@@ -24,7 +24,7 @@ sudo apt-get update && sudo apt-get install -y \
 ./build.sh
 
 # 5. Flash to SD card
-sudo dd if=output/ga36-custom.img of=/dev/sdX bs=1M status=progress
+sudo dd if=output/firmware/ga36-custom.img of=/dev/sdX bs=1M status=progress
 ```
 
 ---
@@ -48,15 +48,16 @@ sudo dd if=output/ga36-custom.img of=/dev/sdX bs=1M status=progress
 ```
 my-image/
 ├── bootstrap.sh              # One-time: downloads all sources
-├── build.sh                  # Main build: ./build.sh
+├── build.sh                  # Single build entry (both images): ./build.sh
 ├── REPRODUCIBILITY.md        # Complete audit report
-├── board/ga36-mb-v1.2/       # Board-specific configs & overlays
+├── board/ga36-mb-v1.2/       # Board-specific configs, DTS overlays, JD9366 driver
 ├── buildroot/                # Buildroot external tree
-├── configs/                  # Buildroot defconfig
+├── configs/                  # Buildroot defconfig + sources.env (versions)
 ├── dts/                      # Kernel DTS
-├── extract/                  # Vendor artifacts (read-only)
+├── extract/                  # Vendor artifacts (read-only, gitignored)
 ├── output/                   # Build artifacts (generated)
-│   ├── firmware/ga36-custom.img   # FINAL IMAGE
+│   ├── firmware/ga36-custom.img    # Route B image (mainline U-Boot)
+│   ├── firmware/ga36-stockboot.img # Route A image (stock bootloader + our kernel)
 │   └── boot/                     # Kernel, DTB, initramfs, U-Boot
 ├── scripts/fw/               # Build scripts (all relative paths)
 │   ├── env.sh
@@ -65,9 +66,13 @@ my-image/
 │   ├── build-initramfs.sh
 │   ├── build-buildroot.sh
 │   ├── package-final.sh
+│   ├── package-stock.sh      # Route A image (needs original/test.img)
+│   ├── recover-lcd-dcs.sh    # re-extract hash-pinned DCS init from lcd.ko
 │   ├── validate-image.sh
 │   └── helpers/
-│       └── egon_check.py
+│       ├── egon_check.py
+│       └── mkbootimg.py
+├── tools/forensics/          # Reverse-engineering scripts & artifacts (audit trail)
 ├── uboot/
 │   ├── configs/ga36_mb_v1_2_defconfig
 │   └── dts/sun8i-a33-ga36-mb-v1.2.dts
@@ -76,8 +81,7 @@ my-image/
     ├── src/                  # Extracted sources
     ├── toolchain/            # Bootlin ARM cross-compiler
     ├── host/                 # Host tools (bison, flex, etc.)
-    ├── build/                # Build directories
-    └── buildroot/            # Buildroot build dir (O=work/buildroot)
+    └── build/                # Build directories
 ```
 
 ---
@@ -85,7 +89,7 @@ my-image/
 ## 🛠 Build Commands
 
 ```bash
-# Full build
+# Full build (produces both images)
 ./build.sh
 
 # Clean build
@@ -97,9 +101,10 @@ my-image/
 ./scripts/fw/build-initramfs.sh
 ./scripts/fw/build-buildroot.sh
 ./scripts/fw/package-final.sh
+./scripts/fw/package-stock.sh
 
 # Validate final image
-./scripts/fw/validate-image.sh output/ga36-custom.img
+./scripts/fw/validate-image.sh output/firmware/ga36-custom.img
 ```
 
 ---
@@ -112,7 +117,7 @@ my-image/
 | Linux 6.12.41 | ✅ | zImage + DTB |
 | Initramfs (BusyBox) | ✅ | ttyS2 115200n8 |
 | Buildroot + RetroArch | ✅ | Lima/MESA GPU |
-| LCD 640×480 RGB | ✅ | DE2 + TCON0 + panel-simple |
+| LCD 640×480 (JD9366 DSI) | 🟡 | fex: `lcd_if=4` (MIPI-DSI), 2 lanes, RGB888, dclk 30 MHz, ht 1040 / vt 518 — DRM panel driver + DSI wiring done (Route A), image ready to test on silicon |
 | PWM Backlight | ✅ | PWM0 @ PH00, 20 kHz |
 | AXP223 PMIC | ✅ | RSB, DCDC1-5 configured |
 | UART2 Console | ✅ | PB00/PB01 @ 115200n8 |
@@ -122,7 +127,7 @@ my-image/
 
 ---
 
-## 🔌 SD Card Layout (Final Image)
+## 🔌 SD Card Layout (`ga36-custom.img`, Route B)
 
 | Region | LBA | Size | Content |
 |--------|-----|------|---------|
@@ -130,6 +135,8 @@ my-image/
 | **SPL + U-Boot** | **16** | **~260 KB** | `u-boot-sunxi-with-spl.bin` |
 | Boot partition | 2048 | 64 MB | ext4: zImage, DTB, initramfs, boot.scr |
 | Rootfs partition | 133120 | ~448 MB | ext4: Buildroot rootfs |
+
+Route A (`ga36-stockboot.img`) has a different layout — see the Route A section above.
 
 ---
 
@@ -140,6 +147,7 @@ All documentation consolidated from `docs/`:
 | File | Content |
 |------|---------|
 | `REPRODUCIBILITY.md` | Complete audit: all paths fixed, deps eliminated, how to build on clean machine |
+| `docs/BUILD.md` | **Single build & reproducibility guide** (bootstrap + build, both images) |
 | `docs/REVERSE_ENGINEERING.md` | Hardware validation checklist (UART, GPIO, LCD, OTG, etc.) |
 | `docs/STATUS.md` | Bring-up status table |
 | `docs/analysis.md` | Original firmware partition analysis |
@@ -155,7 +163,7 @@ All documentation consolidated from `docs/`:
 
 ```bash
 # Verify image structure
-./scripts/fw/validate-image.sh output/ga36-custom.img
+./scripts/fw/validate-image.sh output/firmware/ga36-custom.img
 
 # Expected output:
 # - SPL eGON checksum: VALID
@@ -163,6 +171,9 @@ All documentation consolidated from `docs/`:
 # - Boot partition (ext4) @ LBA 2048
 # - Rootfs partition (ext4) @ LBA 133120
 ```
+
+Route A's `ga36-stockboot.img` self-verifies at build time (boot0 eGON,
+`ANDROID!` magic @172032, MBR + partition start) — see the Route A section above.
 
 ---
 
@@ -186,9 +197,48 @@ All documentation consolidated from `docs/`:
 | FN button | ❌ | GPIO wiring unknown — needs measurement |
 | Touchscreen | ❌ | Controller unknown — needs measurement |
 | WiFi/BT | ❌ | Hardware presence unknown |
-| Display | ✅ | RGB panel only; no DSI driver upstream |
+| Display | 🟡 | JD9366 **MIPI-DSI**: vendor DCS extracted (hash-pinned), DRM panel driver `boe,jd9366` + DSI wiring complete. Test image: `output/firmware/ga36-stockboot.img` (Route A) |
 
 ---
+
+## 🚀 Route A — stock bootloader + our kernel (display bring-up)
+
+The factory boot chain (BROM → boot0/boot1 → stock U-Boot → Android `bootimg`)
+is **kept intact**; we only replace the kernel inside the stock "boot"
+partition. This is the fastest path to a display, and it is exactly how the
+community GA36-MB Linux port boots (`docs/GA36-MB-Linux`).
+
+```bash
+# build kernel + android_boot.img (DTS + JD9366 driver installed automatically)
+bash scripts/fw/build-linux.sh
+# assemble the SD image from the stock dump
+bash scripts/fw/package-stock.sh
+```
+
+**Image:** `output/firmware/ga36-stockboot.img` (1 GiB, `GA36_SD_SIZE_MB` overrides)
+
+Layout (see `scripts/fw/package-stock.sh`):
+
+| Region | LBA | Content |
+|--------|-----|---------|
+| MBR | 0 | standard MBR, 1 partition (ext4 rootfs @ 128 MiB) |
+| stock boot chain | 1..262143 | copied verbatim from `original/test.img`: boot0@16, boot1@38192, sunxi MBR@40960, env@139264 |
+| **Android boot image** | **172032** | our kernel (zImage + appended DTB), empty ramdisk |
+| rootfs (ext4, busybox) | 262144 | `init=/sbin/init`, getty on ttyS2, labelled `linux` |
+
+Kernel cmdline is forced (`CONFIG_CMDLINE_FORCE`): `root=/dev/mmcblk0p1
+rootfstype=ext4 rootwait rw init=/sbin/init earlycon=uart,mmio32,0x01c28800
+loglevel=8 panic=10`. The stock bootloader's own bootargs are ignored.
+
+Flash exactly like any raw image (Raspberry Pi Imager / balenaEtcher / `dd`).
+Expected on first boot: backlight on, fbcon console on the LCD, getty on UART2.
+
+`package-stock.sh` self-verifies: boot0 eGON checksum, `ANDROID!` magic @
+172032, MBR signature + partition start, env partition byte-identical to the
+stock dump.
+
+---
+
 
 ## 📜 License
 

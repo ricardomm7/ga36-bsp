@@ -31,6 +31,24 @@ if ! grep -q 'sun8i-a33-ga36-mb-v1.2.dtb' "$DST_DTS/Makefile"; then
     "$DST_DTS/Makefile" > "$DST_DTS/Makefile.new" && mv "$DST_DTS/Makefile.new" "$DST_DTS/Makefile"
 fi
 
+# 3. Install the JD9366 panel driver (idempotent): source, init DCS table,
+#    Kbuild entry and Kconfig symbol. Do this BEFORE the config step so
+#    olddefconfig honours CONFIG_DRM_PANEL_JD9366.
+DST_PANEL="$KS_SRC/drivers/gpu/drm/panel"
+cp "$BOARD_DIR/jd9366-ga36mbv1-2.c" "$BOARD_DIR/jd9366_init.h" "$DST_PANEL/"
+if ! grep -q 'jd9366-ga36mbv1-2.o' "$DST_PANEL/Makefile"; then
+  echo 'obj-$(CONFIG_DRM_PANEL_JD9366) += jd9366-ga36mbv1-2.o' >> "$DST_PANEL/Makefile"
+fi
+if ! grep -q 'config DRM_PANEL_JD9366' "$DST_PANEL/Kconfig"; then
+  sed -i '/^endmenu/i \
+config DRM_PANEL_JD9366\n\
+\ttristate "JD9366 panel"\n\
+\tdepends on OF && DRM && BACKLIGHT_CLASS_DEVICE\n\
+\thelp\n\
+\t  Say Y here to enable support for the JD9366 panel used on the\n\
+\t  GA36-MB V1.2 (R36S) handheld.\n' "$DST_PANEL/Kconfig"
+fi
+
 CROSS="$(cross_prefix)"
 echo "CROSS_COMPILE=$CROSS" >&2
 export CROSS_COMPILE="$CROSS"
@@ -38,7 +56,7 @@ export ARCH=arm
 export KBUILD_BUILD_USER=ga36
 export KBUILD_BUILD_HOST=ga36fw
 
-# 3. Config. Prefer the canonicalized config stored in the repo; generate it
+# 4. Config. Prefer the canonicalized config stored in the repo; generate it
 #    once from sunxi_defconfig + fragment if absent.
 mkdir -p "$KS_OBJ"
 if [ -f "$KS_CONFIG" ]; then
@@ -54,13 +72,25 @@ else
   echo "Saved kernel config to $KS_CONFIG" >&2
 fi
 
-# 4. Build kernel image + board dtb.
+# 5. Build kernel image + board dtb.
 make -C "$KS_SRC" O="$KS_OBJ" -j"$(nproc)" zImage
 make -C "$KS_SRC" O="$KS_OBJ" -j"$(nproc)" dtbs
 
-# 5. Collect artifacts.
+# 6. Collect artifacts, append the DTB and assemble the Android boot image
+#    the stock bootloader expects at LBA 172032 (Route A, see package-stock.sh).
 cp "$KS_OBJ/arch/arm/boot/zImage" "$FW_BOOT/zImage"
 cp "$KS_OBJ/arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dtb" \
    "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb"
+cat "$FW_BOOT/zImage" "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb" > "$FW_BOOT/zImage_with_dtb"
 
-echo "OK: $FW_BOOT/zImage ($(stat -c%s "$FW_BOOT/zImage") bytes), $FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb ($(stat -c%s "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb") bytes)"
+# Empty ramdisk, exactly like the proven docs/GA36-MB-Linux flow: root is the
+# ext4 partition (mmcblk0p1) whose cmdline is forced in the kernel config.
+: > "$FW_BOOT/empty_ramdisk"
+python3 "$ROOT/scripts/fw/helpers/mkbootimg.py" \
+  --kernel "$FW_BOOT/zImage_with_dtb" \
+  --ramdisk "$FW_BOOT/empty_ramdisk" \
+  --base 0x40000000 --board sun8i --pagesize 2048 \
+  --cmdline "$(sed -n 's/^CONFIG_CMDLINE="\(.*\)"/\1/p' "$KS_CONFIG")" \
+  -o "$FW_BOOT/android_boot.img"
+
+echo "OK: $FW_BOOT/android_boot.img ($(stat -c%s "$FW_BOOT/android_boot.img") bytes)"
