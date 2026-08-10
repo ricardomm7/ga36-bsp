@@ -112,8 +112,7 @@ so no U-Boot rebuild is needed to boot. Mainline U-Boot remains future work:
 `scripts/fw/package-stock.sh` produces `output/firmware/ga36-stockboot.img`:
 
 1. Standard MBR: one ext4 partition at 128 MiB (`label-id 0x534f4f4c`).
-2. `original/test.img` sectors 1..262143 copied verbatim — preserves stock
-   `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264`.
+2. `bootloader/ga36-stock-bootchain-128m.bin.gz` é descomprimido on-the-fly e os seus 262143 setores copiados para a imagem — preserva os vitais `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264` e os misteriosos offsets de configurações de fábrica, sem necessitar da gigantesca `test.img` original.
 3. `output/firmware/boot/android_boot.img` written at `LBA 172032` (the stock
    "boot" partition). Built by `scripts/fw/build-linux.sh` via
    `scripts/fw/helpers/mkbootimg.py`:

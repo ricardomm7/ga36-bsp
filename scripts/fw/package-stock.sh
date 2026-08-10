@@ -24,7 +24,6 @@ set -euo pipefail
 
 need_cmd dd need_cmd truncate need_cmd sfdisk need_cmd mke2fs need_cmd e2fsck need_cmd python3
 
-ORIG="$ROOT/original/test.img"
 BOOT_IMG="$FW_BOOT/android_boot.img"
 EGON_CHECK="$ROOT/scripts/fw/helpers/egon_check.py"
 
@@ -36,8 +35,9 @@ ROOTFS_LBA=262144            # 128 MiB
 SD_SIZE_MB="${GA36_SD_SIZE_MB:-1024}"
 
 SD="$FW_OUT/ga36-stockboot.img"
+BOOTCHAIN="$ROOT/bootloader/ga36-stock-bootchain-128m.bin.gz"
 
-for f in "$ORIG" "$BOOT_IMG"; do
+for f in "$BOOT_IMG" "$BOOTCHAIN"; do
   [ -f "$f" ] || { echo "ERROR: missing $f" >&2; exit 2; }
 done
 
@@ -66,8 +66,10 @@ label-id: 0x534f4f4c
 start=$ROOTFS_LBA, type=83, bootable
 EOF
 
-log "Copying stock boot chain (sectors 1..$COPY_END_LBA from $ORIG)"
-dd if="$ORIG" of="$SD" bs=512 skip=1 seek=1 count=$COPY_END_LBA \
+
+
+log "Copying stock boot chain (sectors 1..$COPY_END_LBA from $BOOTCHAIN)"
+zcat "$BOOTCHAIN" | dd of="$SD" bs=512 seek=1 count=$COPY_END_LBA \
    conv=notrunc status=none
 
 log "Writing android boot image at sector $BOOT_IMG_LBA"

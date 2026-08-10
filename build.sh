@@ -64,13 +64,7 @@ main() {
     "$ROOT_DIR/scripts/fw/package-final.sh"
 
     log_info "=== Step 6/6: Packaging stock-bootloader image (Route A) ==="
-    if [ -f "$ROOT_DIR/original/test.img" ]; then
-        "$ROOT_DIR/scripts/fw/package-stock.sh"
-    else
-        log_warn "original/test.img missing — skipping ga36-stockboot.img"
-        log_warn "  (add your factory dump to original/test.img; it is gitignored,"
-        log_warn "  see original/README.md)"
-    fi
+    "$ROOT_DIR/scripts/fw/package-stock.sh"
 
     log_info "Build complete!"
     log_info "Route B (mainline U-Boot): $FW_OUT/ga36-custom.img"
