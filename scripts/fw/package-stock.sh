@@ -11,7 +11,7 @@
 #   sector      0 : standard MBR (single ext4 partition starting at 128 MiB)
 #   sectors 1..262143 : copied from original/test.img (skip sector 0 = our MBR)
 #                       boot0@16, boot1@38192, sunxi MBR@40960, env@139264
-#   sector 172032 : android_boot.img (zImage + appended DTB, empty ramdisk)
+#   sector 172031 : android_boot.img (zImage + appended DTB, empty ramdisk)
 #   sector 262144 : ext4 rootfs (busybox, init=/sbin/init), labelled "linux"
 #
 # Kernel cmdline is forced at build time (CONFIG_CMDLINE_FORCE):
@@ -29,14 +29,20 @@ EGON_CHECK="$ROOT/scripts/fw/helpers/egon_check.py"
 
 # Geometry (sectors of 512 bytes)
 BOOT0_LBA=16
-BOOT_IMG_LBA=172032
+BOOT_IMG_LBA=172031
 COPY_END_LBA=262143          # 128 MiB - 1 sector
 ROOTFS_LBA=262144            # 128 MiB
 SD_SIZE_MB="${GA36_SD_SIZE_MB:-1024}"
 
 SD="$FW_OUT/ga36-stockboot.img"
-BOOTCHAIN="$ROOT/bootloader/ga36-stock-bootchain-128m.bin.gz"
+BOOTCHAIN_SRC="$ROOT/bootloader/ga36-stock-bootchain-128m.bin.gz"
+BOOTCHAIN="$FW_WORK/build/bootchain-mod.bin.gz"
+cp "$BOOTCHAIN_SRC" "$BOOTCHAIN"
 
+if [ -f "$ROOT/bmps/splash.bmp" ]; then
+    echo -e "\033[0;32m[INFO]\033[0m Injecting custom splash from bmps/splash.bmp"
+    python3 "$ROOT/scripts/fw/inject_splash.py" "$BOOTCHAIN" "$ROOT/bmps/splash.bmp"
+fi
 for f in "$BOOT_IMG" "$BOOTCHAIN"; do
   [ -f "$f" ] || { echo "ERROR: missing $f" >&2; exit 2; }
 done

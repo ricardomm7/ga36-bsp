@@ -83,12 +83,14 @@ cp "$KS_OBJ/arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dtb" \
    "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb"
 cat "$FW_BOOT/zImage" "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb" > "$FW_BOOT/zImage_with_dtb"
 
-# Empty ramdisk, exactly like the proven docs/GA36-MB-Linux flow: root is the
-# ext4 partition (mmcblk0p1) whose cmdline is forced in the kernel config.
-: > "$FW_BOOT/empty_ramdisk"
+# Use the real initramfs built by build-initramfs.sh instead of an empty one.
+# This ensures the kernel can reach userspace even if the SD card driver fails.
+RAMDISK="$FW_BOOT/initramfs.cpio.gz"
+[ -f "$RAMDISK" ] || : > "$RAMDISK"
+
 python3 "$ROOT/scripts/fw/helpers/mkbootimg.py" \
   --kernel "$FW_BOOT/zImage_with_dtb" \
-  --ramdisk "$FW_BOOT/empty_ramdisk" \
+  --ramdisk "$RAMDISK" \
   --base 0x40000000 --board sun8i --pagesize 2048 \
   --cmdline "$(sed -n 's/^CONFIG_CMDLINE="\(.*\)"/\1/p' "$KS_CONFIG")" \
   -o "$FW_BOOT/android_boot.img"

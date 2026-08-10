@@ -59,6 +59,7 @@ mkdir -p "$ROOTFS/etc/init.d" "$ROOTFS/dev" "$ROOTFS/proc" \
 cat > "$ROOTFS/etc/inittab" <<'EOF'
 ::sysinit:/etc/init.d/rcS
 ttyS2::respawn:/sbin/getty -L ttyS2 115200 vt100
+tty1::respawn:-/bin/sh
 ::ctrlaltdel:/sbin/reboot
 ::shutdown:/bin/umount -a -r
 EOF
@@ -68,6 +69,17 @@ cat > "$ROOTFS/etc/init.d/rcS" <<'EOF'
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
 echo "GA36 initramfs: system ready"
+
+# Blink the backlight to prove we reached userspace!
+BL=/sys/class/backlight/backlight/brightness
+if [ -f "$BL" ]; then
+    while true; do
+        echo 0 > "$BL"
+        sleep 1
+        echo 255 > "$BL"
+        sleep 1
+    done
+fi
 EOF
 chmod 755 "$ROOTFS/etc/init.d/rcS"
 
