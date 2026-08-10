@@ -4,6 +4,13 @@
 declara RK3326 + RK817. Este documento prova cada identificação com offsets, mostra a evidência
 runtime, documenta as revisões GA36 conhecidas e define o teste que resolve a contradição.
 
+> **RESOLVIDO (2026, prova de hardware via FEL):** o SoC desta unidade (GA36-MB V1.2)
+> foi identificado diretamente no BROM com `sunxi-fel`: chip-id **`0x1650` = Allwinner A23**
+> (família sun8i A23/A33). Não é RK3326. A identificação via FEL é leitura do silício,
+> não documentação — a hipótese RK3326 está fechada para esta placa, e a pinagem
+> PB00/PB01 = UART2 é válida para testar em hardware. O BSP atual (`MACH_SUN8I_A33`)
+> aplica-se ao A23/A33 sem alterações.
+
 ## 1. Identificação de AXP223 — BOOT1 (U-Boot), offsets no ficheiro bruto
 
 | Offset absoluto | Evidência |
@@ -75,8 +82,16 @@ AXP223) → boot.img sunxi (p6, magic `ANDROID!` + cmdline) → kernel 3.4.39 su
 |---|---|---|---|
 | GA36-MB V1.0 | 2025-07-30 | **Allwinner A33** (marcações `RK3326 NACLH04028` FALSAS) | phaseloop/R36S-console-clone---GA36-MB-V1.0-20250730 |
 | GA36-MB V1.1 | 2025-10-25 | **RK3326 real** (2× Samsung K4B4G1646E, 1 GB) | AeolusUX/ArkOS-R3XS #285; TheAlexClavijo backup |
-| GA36-MB V1.2 | ? | **NÃO documentada** (a placa do utilizador) | — |
+| GA36-MB V1.2 (esta unidade) | ? | **Allwinner A23** — chip-id `0x1650` via `sunxi-fel` (BROM) | sessão FEL deste projeto |
 | G80 (boardType) | ? | família de clones G80 (algumas RK3326) | handhelds.miraheze.org/wiki/R36S_Clones |
+
+### 7.1 Esta unidade (GA36-MB V1.2) — identificação via FEL
+
+Prova de hardware, não documentação: `sunxi-fel` lê o chip-id diretamente do BROM do
+SoC com a placa em modo FEL, antes de qualquer firmware do cartão. Leitura:
+`chip-id = 0x1650` → **Allwinner A23** (sun8i). A distinção V1.0/V1.1/RK3326 abaixo
+aplica-se a OUTRAS unidades documentadas na web; para esta unidade o SoC está
+confirmado e a pinagem PB00/PB01 = UART2 é a config de fábrica (`sys_config.fex`).
 
 Ferramenta independente `AIntelligentTech/retro-handheld-verify` confirma o mesmo método:
 GA36 clone → eGON @ setor 16 + `[ND]A33` nas strings → **veredicto GA36_CLONE/Allwinner A33**.
@@ -86,20 +101,22 @@ GA36 clone → eGON @ setor 16 + `[ND]A33` nas strings → **veredicto GA36_CLON
 - **FACTO (firmware)**: boot0+boot1+U-Boot+kernel+SYSTEM+runtime = Allwinner A33 + AXP223.
 - **FACTO (runtime)**: a consola que usou este cartão reportou Mali-400 MP @ 640x480 e build
   EmuELEC-A33 — não é RK3326 (Mali-G31).
+- **FACTO (silício)**: esta unidade (V1.2) tem chip-id **`0x1650` = A23** lido no BROM via
+  `sunxi-fel` — A23 e A33 partilham a mesma família sun8i, coerente com todo o firmware.
 - **Dedução**: um RK3326 real não tem idbloader Rockchip neste cartão (setor 64 = `0xFF`,
   zero `D00DFEED`/`RKNS` em 15.6 GB) → **este cartão não arranca numa consola RK3326**.
 
-Duas hipóteses restantes:
-1. A placa fotografada é na realidade A33 (marcações RK3326 falsas, como documentado na V1.0);
-   o cartão é o de fábrica dessa consola.
-2. A placa fotografada é RK3326 real (V1.1/V1.2) e o cartão veio de OUTRA consola (V1.0/A33),
-   que é quem gerou os logs (Jan/2025–Mai/2026).
+Das duas hipóteses anteriores, a que sobreviveu é a nº 1 (marcações RK3326 falsas,
+SoC A23/A33) — confirmada pela leitura FEL na própria placa. A hipótese nº 2
+(RK3326 real) está descartada para esta unidade.
 
-**Testes que resolvem (nesta ordem):**
-1. **RetroArch → Information → System**: `CPU: ARMv7` + `Mali-400` = A33; `CPU: ARMv8 (64bit)` + `Mali-G31` = RK3326.
-2. **Arrancar SEM cartão SD**: clone A33 mostra menu/bootlogo; RK3326 original não arranca.
-3. **UART a 1 500 000 baud**: banner `U-Boot ... (sunxi)`/`CPU: Allwinner A33` vs `Rockchip RK3326`.
-4. **Foto do die vs phaseloop V1.0**: as marcações `RK3326 NACLH04028 ...` da V1.0 são falsas por cima do die A33.
-5. **RAM**: 497 MB reportado = clone; 977 MB = RK3326 (V1.1/V1.2 dual-chip).
+**Testes que resolvem (históricos; o decisivo já foi executado nesta unidade):**
+1. ~~Identificação via FEL~~ — **EXECUTADO: chip-id `0x1650` = A23.**
+2. **RetroArch → Information → System**: `CPU: ARMv7` + `Mali-400` = A33; `CPU: ARMv8 (64bit)` + `Mali-G31` = RK3326.
+3. **Arrancar SEM cartão SD**: clone A33 mostra menu/bootlogo; RK3326 original não arranca.
+4. **UART a 1 500 000 baud**: banner `U-Boot ... (sunxi)`/`CPU: Allwinner A33` vs `Rockchip RK3326`.
+5. **Foto do die vs phaseloop V1.0**: as marcações `RK3326 NACLH04028 ...` da V1.0 são falsas por cima do die A33.
+6. **RAM**: 497 MB reportado = clone; 977 MB = RK3326 (V1.1/V1.2 dual-chip).
 
-**Não fazer pivot do BSP** enquanto o teste 1 (ou 2/3) não identificar o SoC real da placa fotografada.
+O BSP A33 (SPL + U-Boot + Linux sun8i) está alinhado com o silício confirmado — sem
+pivot necessário.
