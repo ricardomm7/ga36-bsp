@@ -4,6 +4,40 @@ Start with generated facts in `analysis.md`. Add each bench-proven electrical fa
 
 ## FACTS
 
+### 2026-08-11 — Kernel boots to fbcon; missing `/memory` node was the crash (silicon-proven)
+- **Finding:** with the explicit 512 MiB `/memory` node in
+  `dts/sun8i-a33-ga36-mb-v1.2.dts`, the mainline 6.12 kernel **boots** on the
+  unit: splash passes, Tux logo + kernel log render on the LCD via fbcon.
+- **Root cause of the long "static splash":** the DTS had **no** `/memory`
+  node and relied on `CONFIG_ARM_ATAG_DTB_COMPAT`. The stock boot1 does **not**
+  reliably deliver ATAG_MEM to a mainline zImage on this unit, so the kernel
+  crashed before the console. The working community DTS
+  (`docs/GA36-MB-Linux/sun8i-a33-ga36mb-v12.dts`) declares
+  `memory@40000000 { reg = <0x40000000 0x20000000>; }` — copied verbatim.
+- **Silicon status: CONFIRMED.**
+
+### 2026-08-11 — This unit's boot1 requires the factory PhoenixCard DOS MBR (silicon-proven)
+- **Finding:** with a plain `sfdisk` MBR (single ext4 partition @262144) the
+  board stays **stuck on the splash even with the STOCK kernel**. With the
+  byte-exact factory DOS MBR (P1 FAT32@3383336, P2 FAT16 bootable@73728, P3
+  extended@1, sig 0xaa55) the same stock kernel boots. The factory MBR is
+  committed as `bootloader/ga36-stock-mbr.bin` and written by
+  `package-stock.sh` at sector 0. NOTE: the community GA36-MB-V1.2 boots with
+  a plain parted/sfdisk MBR — this unit's boot1 differs.
+- **Silicon status: CONFIRMED.**
+
+### 2026-08-11 — Mainline rootfs mount: no p7 in the EBR; rootfs must live in an MBR partition (static, offset-proven)
+- **Finding:** the factory DOS/EBR table defines only p5 (env@139264), p6
+  (boot@172032) and p8 (storage@1286144, type 0x83). The factory "p7 rootfs"
+  (@237568) exists **only** in the vendor `partitions=` cmdline, which the
+  mainline kernel does not support. A rootfs at 262144 (as the earlier
+  `package-stock.sh` wrote) is therefore **outside any partition** and cannot
+  be mounted (`root=/dev/mmcblk0p1` pointed at the FAT32 UDISK slot instead).
+  The current layout writes the ext4 rootfs **inside MBR P1** (sector 3383336)
+  so it is `/dev/mmcblk0p1` exactly as the forced cmdline expects.
+- **Silicon status: NOT CONFIRMED** — reflash `ga36-stockboot.img` and confirm
+  the BusyBox shell.
+
 ### 2026-08-11 — Kernel must sit at LBA 172032, not 172031 (static, source-confirmed)
 - **Finding:** the stock bootloader reads the Android boot image from sector
   **172032** (64 MiB + 0x1000 into the boot partition; confirmed in

@@ -6,7 +6,7 @@ on any dev machine. There is exactly **one** dependency-fetch step and exactly
 
 ## Host requirements
 
-- **Linux or WSL** (bash + GNU coreutils: `dd`, `mke2fs`, `e2fsck`, `sfdisk`,
+- **Linux or WSL** (bash + GNU coreutils: `dd`, `mke2fs`, `e2fsck`,
   `stat`, `truncate`). Windows native is not supported.
 - Toolchain and kernel are built with the **Bootlin ARM prebuilt toolchain** —
   no distro cross-compiler needed.
@@ -33,7 +33,8 @@ Pipeline: `build-linux.sh` → `build-initramfs.sh` → `package-stock.sh`.
 
 The stock boot chain (boot0/boot1, sunxi MBR, env and the stock boot
 partition) is **committed** in `bootloader/ga36-stock-bootchain-128m.bin.gz`
-(128 MiB first-part image, extracted from the factory dump). The build is
+(128 MiB first-part image, extracted from the factory dump) together with the
+byte-exact factory DOS MBR in `bootloader/ga36-stock-mbr.bin`. The build is
 fully self-contained: no external SD dump is required.
 
 ## Reproducibility guarantees

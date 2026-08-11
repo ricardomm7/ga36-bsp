@@ -33,9 +33,17 @@
 	};
 
 	/*
-	 * No /memory node: the RAM size (2x DDR3, 512 MiB each = 1 GiB per
-	 * R36S spec; unconfirmed on this unit) is patched by U-Boot.
+	 * Explicit /memory node. The stock boot1 does NOT reliably deliver
+	 * ATAG_MEM fixup to a mainline zImage on this unit (kernel crashed
+	 * before console with no memory node). Declare 512 MiB like the
+	 * working community DTS (docs/GA36-MB-Linux/sun8i-a33-ga36mb-v12.dts).
+	 * R36S spec claims 1 GiB (2x512 DDR3); if the unit really has 1 GiB
+	 * the upper half is simply unused for now — tune after hardware proof.
 	 */
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 0x20000000>;
+	};
 
 	backlight: backlight {
 		compatible = "pwm-backlight";

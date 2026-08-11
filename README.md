@@ -109,7 +109,7 @@ my-image/
 | Stock boot0/boot1 chain | ✅ | preserved verbatim in the image (boot0@16, boot1@38192) |
 | Linux 6.12.41 | ✅ | zImage + appended DTB |
 | Rootfs (BusyBox) | ✅ | ext4, ttyS2 115200n8 + tty1 |
-| LCD 640×480 (JD9366 DSI) | 🟡 | fex: `lcd_if=4` (MIPI-DSI), 2 lanes, RGB888, dclk 30 MHz — DRM panel driver + DSI wiring done, image ready to test on silicon |
+| LCD 640×480 (JD9366 DSI) | ✅ | fex: `lcd_if=4` (MIPI-DSI), 2 lanes, RGB888, dclk 30 MHz — DRM panel driver + DSI wiring; kernel boots to fbcon on the LCD (Tux + boot log) |
 | PWM Backlight | ✅ | PWM0 @ PH00, 20 kHz |
 | AXP223 PMIC | ✅ | RSB, DCDC1-5 configured |
 | UART2 Console | ✅ | PB00/PB01 @ 115200n8 |
@@ -123,20 +123,22 @@ my-image/
 
 | Region | LBA | Content |
 |--------|-----|---------|
-| MBR | 0 | standard MBR, 1 partition (ext4 rootfs @ 128 MiB) |
-| stock boot chain | 1..262143 | committed `bootloader/ga36-stock-bootchain-128m.bin.gz`: boot0@16, boot1@38192, sunxi MBR@40960, env@139264 |
+| MBR | 0 | **factory DOS MBR** (byte-exact, `bootloader/ga36-stock-mbr.bin`) — this unit's boot1 requires it |
+| stock boot chain | 1..262143 | committed `bootloader/ga36-stock-bootchain-128m.bin.gz`: boot0@16, boot1@38192, sunxi MBR@40960, env@139264, EBRs@1/2/4/8 |
 | **Android boot image** | **172032** | our kernel (zImage + appended DTB), empty ramdisk |
-| rootfs (ext4, busybox) | 262144 | `init=/sbin/init`, getty on ttyS2, labelled `linux` |
+| p8 storage (EBR) | 1286144..3383335 | untouched factory space (left as-is) |
+| rootfs (ext4, busybox) | 3383336 | MBR P1 (factory "UDISK" slot) → `/dev/mmcblk0p1`, `init=/sbin/init`, getty on ttyS2, labelled `linux` |
 
 Kernel cmdline is forced (`CONFIG_CMDLINE_FORCE`): `root=/dev/mmcblk0p1
 rootfstype=ext4 rootwait rw init=/sbin/init earlycon=uart,mmio32,0x01c28800
 loglevel=8 panic=10`. The stock bootloader's own bootargs are ignored.
 
 Flash exactly like any raw image (Raspberry Pi Imager / balenaEtcher / `dd`).
-Expected on first boot: backlight on, fbcon console on the LCD, getty on UART2.
+Expected on first boot: backlight on, fbcon console on the LCD (Tux + boot
+log), then the BusyBox shell (`init=/sbin/init`), getty on UART2.
 
-`package-stock.sh` self-verifies at build time: boot0 eGON checksum, `ANDROID!`
-magic @172032, MBR signature + partition start.
+`package-stock.sh` self-verifies at build time: factory MBR byte-exact, boot0
+eGON checksum, `ANDROID!` magic @172032, P1 start + ext4 superblock.
 
 ---
 

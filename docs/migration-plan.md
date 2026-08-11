@@ -111,14 +111,18 @@ so no U-Boot rebuild is needed to boot. Mainline U-Boot remains future work:
 ### E. Boot chain — Route A (stock bootloader + our kernel) — DONE
 `scripts/fw/package-stock.sh` produces `output/firmware/ga36-stockboot.img`:
 
-1. Standard MBR: one ext4 partition at 128 MiB (`label-id 0x534f4f4c`).
-2. `bootloader/ga36-stock-bootchain-128m.bin.gz` é descomprimido on-the-fly e os seus 262143 setores copiados para a imagem — preserva os vitais `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264` e os misteriosos offsets de configurações de fábrica, sem necessitar da gigantesca `test.img` original.
+1. Factory DOS MBR (byte-exact, `bootloader/ga36-stock-mbr.bin`) at sector 0 —
+   this unit's boot1 does not boot a plain sfdisk MBR (see STATUS.md).
+2. `bootloader/ga36-stock-bootchain-128m.bin.gz` é descomprimido on-the-fly e os seus 262143 setores copiados para a imagem — preserva os vitais `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264`, EBRs e os misteriosos offsets de configurações de fábrica, sem necessitar da gigantesca `test.img` original.
 3. `output/firmware/boot/android_boot.img` written at `LBA 172032` (the stock
    "boot" partition). Built by `scripts/fw/build-linux.sh` via
    `scripts/fw/helpers/mkbootimg.py`:
    `--base 0x40000000 --board sun8i --pagesize 2048`, kernel = zImage with the
    board DTB appended, **empty ramdisk** (root is on disk), cmdline in header.
-4. busybox rootfs (`init=/sbin/init`, getty on ttyS2) as ext4 at `LBA 262144`.
+4. busybox rootfs (`init=/sbin/init`, getty on ttyS2) as ext4 at `LBA 3383336`
+   — inside MBR P1 (factory "UDISK" slot) so mainline mounts it as
+   `/dev/mmcblk0p1`. The factory EBR defines no p7; its "p7 rootfs" only
+   exists in the vendor `partitions=` cmdline, unsupported by mainline.
 
 Kernel uses `CONFIG_CMDLINE_FORCE`, so the stock bootloader's own bootargs are
 ignored: `root=/dev/mmcblk0p1 rootfstype=ext4 rootwait rw init=/sbin/init
