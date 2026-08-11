@@ -87,7 +87,7 @@ Formato: **FACTO** / **HIPÓTESE** / **PROVA** / **GRAU DE CONFIANÇA** / **PRÓ
 > (RetroArch CPU/Mali, boot sem SD, UART).**
 
 O alvo correto é **Allwinner A33 / sun8i**, não RK3326:
-- U-Boot mainline sunxi (2025.x) + SPL eGON.
-- Linux mainline `sun8i-a33` (kernel 6.12/6.13) com DTS próprio — a config legacy script.bin é substituída por DTS.
+- Manter o **bootloader stock** (boot0/boot1 + Android boot img) intacto e substituir apenas o kernel — ver `docs/spl-vs-boot0-audit.md`. O port mainline (SPL+U-Boot) foi abandonado.
+- Linux mainline `sun8i-a33` (kernel 6.12) com DTS próprio — a config legacy script.bin é substituída por DTS.
 - Remover `RKBIN_COMMIT` de `configs/sources.env`; substituir `dts/rk3326-ga36-mb-v1.2.dts`.
-- O fluxo de boot atual (boot.img Android + initrd EmuELEC + kernel 3.4) é substituído por U-Boot mainline + kernel mainline + DTB, mantendo a partição de dados.
+- O fluxo de boot atual (boot.img Android + initrd EmuELEC + kernel 3.4) é preservado: só o kernel dentro da partição "boot" stock é substituído pelo nosso (LBA 172032).

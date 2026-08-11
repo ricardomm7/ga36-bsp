@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # GA36-MB V1.2 (R36S) — Complete firmware build script
-# Single entry point. Produces BOTH images from one ./build.sh:
-#   output/firmware/ga36-custom.img      (Route B: mainline SPL+U-Boot)
-#   output/firmware/ga36-stockboot.img   (Route A: stock bootloader + our kernel)
-# Allwinner A33 sun8i, U-Boot 2025.07, Linux 6.12, Buildroot.
+# Single entry point. Produces ONE image:
+#   output/firmware/ga36-stockboot.img  (stock bootloader + our kernel)
+#
+# The stock bootloader (boot0/boot1 from the factory card) is preserved in the
+# first 128 MiB of the image; only the kernel inside the stock "boot" partition
+# is replaced with our Android boot image (Linux 6.12 + JD9366 panel driver).
+# See docs/BUILD.md for the full layout.
 #
 # Usage: ./build.sh [--clean]
 #   --clean: clean all build directories before building
 #
-# Route A additionally needs the factory dump original/test.img (gitignored —
-# it is YOUR card's acquisition, see original/README.md). If it is missing the
-# stock image is skipped with a warning; ga36-custom.img is still built.
-
+# The stock bootchain (boot0/boot1 + logo from the factory card) is already
+# committed under bootloader/ga36-stock-bootchain-128m.bin.gz, so the build is
+# fully self-contained.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,7 +40,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 main() {
     log_info "Starting GA36-MB V1.2 firmware build"
     log_info "Target: Allwinner A33 (sun8i)"
-    log_info "U-Boot: 2025.07, Linux: 6.12.41, Buildroot: 2025.02.1"
+    log_info "Linux: 6.12.41, BusyBox: 1.36.1"
 
     if [[ "$CLEAN_BUILD" == "true" ]]; then
         log_info "Cleaning build directories..."
@@ -47,29 +49,20 @@ main() {
         mkdir -p "$FW_OUT/boot"
     fi
 
-    # Build order: U-Boot -> Linux -> Initramfs -> Buildroot -> Package SD
-    log_info "=== Step 1/6: Building U-Boot 2025.07 ==="
-    "$ROOT_DIR/scripts/fw/build-uboot.sh"
-
-    log_info "=== Step 2/6: Building Linux 6.12.41 ==="
+    log_info "=== Step 1/3: Building Linux 6.12.41 ==="
     "$ROOT_DIR/scripts/fw/build-linux.sh"
 
-    log_info "=== Step 3/6: Building initramfs ==="
+    log_info "=== Step 2/3: Building initramfs ==="
     "$ROOT_DIR/scripts/fw/build-initramfs.sh"
 
-    log_info "=== Step 4/6: Building Buildroot rootfs ==="
-    "$ROOT_DIR/scripts/fw/build-buildroot.sh"
-
-    log_info "=== Step 5/6: Packaging final SD image ==="
-    "$ROOT_DIR/scripts/fw/package-final.sh"
-
-    log_info "=== Step 6/6: Packaging stock-bootloader image (Route A) ==="
+    log_info "=== Step 3/3: Packaging stock-bootloader image ==="
     "$ROOT_DIR/scripts/fw/package-stock.sh"
 
     log_info "Build complete!"
-    log_info "Route B (mainline U-Boot): $FW_OUT/ga36-custom.img"
-    log_info "Route A (stock bootloader + our kernel): $FW_OUT/ga36-stockboot.img"
-    log_info "Flash with: sudo dd if=$FW_OUT/ga36-custom.img of=/dev/sdX bs=1M status=progress"
+    log_info "Image: $FW_OUT/ga36-stockboot.img"
+    log_info "Flash with: sudo dd if=$FW_OUT/ga36-stockboot.img of=/dev/sdX bs=4M status=progress"
 }
 
 main "$@"
+
+# vi: set sw=4 ts=4 noet:

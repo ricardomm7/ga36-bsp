@@ -18,11 +18,6 @@ else
     FW_WORK="$ROOT/work"
 fi
 FW_DL="$FW_WORK/dl"
-
-# Buildroot downloads go to the same repo-local cache as bootstrap.sh.
-# After the first build every source archive lives in work/dl and all
-# rebuilds run fully offline.
-export BR2_DL_DIR="$FW_DL"
 FW_SRC="$FW_WORK/src"
 FW_HOST="$FW_WORK/host"          # host tools built from source (m4, flex, bison)
 FW_TOOLCHAIN="$FW_WORK/toolchain"
@@ -32,15 +27,12 @@ FW_BOOT="$FW_OUT/boot"           # boot partition payload
 
 # Source versions (single source of truth, mirrors configs/sources.env).
 LINUX_VERSION="${LINUX_VERSION:-6.12.41}"
-UBOOT_VERSION="${UBOOT_VERSION:-2025.07}"
-BUILDROOT_VERSION="${BUILDROOT_VERSION:-2025.02.1}"
 BUSYBOX_VERSION="${BUSYBOX_VERSION:-1.36.1}"
 TOOLCHAIN_TARBALL="armv7-eabihf--glibc--stable-2025.08-1.tar.xz"
 TOOLCHAIN_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv7-eabihf/tarballs/$TOOLCHAIN_TARBALL"
 
 # The board DTS file name as shipped in upstream trees.
 BOARD_DTS=sun8i-a33-ga36-mb-v1.2.dts
-UBOOT_DEFCONFIG=ga36_mb_v1_2_defconfig
 
 # Buildroot rejects PATH entries containing spaces (WSL interop appends
 # Windows dirs like /mnt/c/Program Files/...). Strip them up front.

@@ -84,7 +84,7 @@ cp "$KS_OBJ/arch/arm/boot/dts/allwinner/sun8i-a33-ga36-mb-v1.2.dtb" \
 cat "$FW_BOOT/zImage" "$FW_BOOT/sun8i-a33-ga36-mb-v1.2.dtb" > "$FW_BOOT/zImage_with_dtb"
 
 # Use an empty ramdisk as in the original GA36 Dockerfile.
-# The initramfs built by buildroot might be causing early kernel panics before console is up.
+# A populated initramfs caused early kernel panics before console is up.
 RAMDISK="$FW_BOOT/empty_ramdisk"
 : > "$RAMDISK"
 

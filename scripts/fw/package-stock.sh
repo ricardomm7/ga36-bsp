@@ -11,14 +11,14 @@
 #   sector      0 : standard MBR (single ext4 partition starting at 128 MiB)
 #   sectors 1..262143 : copied from original/test.img (skip sector 0 = our MBR)
 #                       boot0@16, boot1@38192, sunxi MBR@40960, env@139264
-#   sector 172031 : android_boot.img (zImage + appended DTB, empty ramdisk)
+#   sector 172032 : android_boot.img (zImage + appended DTB, empty ramdisk)
 #   sector 262144 : ext4 rootfs (busybox, init=/sbin/init), labelled "linux"
 #
 # Kernel cmdline is forced at build time (CONFIG_CMDLINE_FORCE):
 #   root=/dev/mmcblk0p1 rootfstype=ext4 rootwait rw init=/sbin/init ...
 #
-# Requires: original/test.img (stock dump), android_boot.img (build-linux.sh),
-# busybox initramfs staging (build-initramfs.sh, run automatically).
+# Requires: bootloader/ga36-stock-bootchain-128m.bin.gz (committed), android_boot.img
+# (build-linux.sh), busybox initramfs staging (build-initramfs.sh, run automatically).
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/env.sh"
 
@@ -29,7 +29,7 @@ EGON_CHECK="$ROOT/scripts/fw/helpers/egon_check.py"
 
 # Geometry (sectors of 512 bytes)
 BOOT0_LBA=16
-BOOT_IMG_LBA=172031
+BOOT_IMG_LBA=172032
 COPY_END_LBA=262143          # 128 MiB - 1 sector
 ROOTFS_LBA=262144            # 128 MiB
 SD_SIZE_MB="${GA36_SD_SIZE_MB:-1024}"
@@ -37,6 +37,7 @@ SD_SIZE_MB="${GA36_SD_SIZE_MB:-1024}"
 SD="$FW_OUT/ga36-stockboot.img"
 BOOTCHAIN_SRC="$ROOT/bootloader/ga36-stock-bootchain-128m.bin.gz"
 BOOTCHAIN="$FW_WORK/build/bootchain-mod.bin.gz"
+mkdir -p "$FW_WORK/build"
 cp "$BOOTCHAIN_SRC" "$BOOTCHAIN"
 
 if [ -f "$ROOT/bmps/splash.bmp" ]; then

@@ -22,8 +22,6 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # Source versions (must match scripts/fw/env.sh)
 LINUX_VERSION="6.12.41"
-UBOOT_VERSION="2025.07"
-BUILDROOT_VERSION="2025.02.1"
 BUSYBOX_VERSION="1.36.1"
 TOOLCHAIN_TARBALL="armv7-eabihf--glibc--stable-2025.08-1.tar.xz"
 TOOLCHAIN_URL="https://toolchains.bootlin.com/downloads/releases/toolchains/armv7-eabihf/tarballs/$TOOLCHAIN_TARBALL"
@@ -135,20 +133,14 @@ main() {
     log_info "=== Downloading sources ==="
     # Toolchain
     download_file "$TOOLCHAIN_URL" "$DL_DIR/$TOOLCHAIN_TARBALL"
-    # U-Boot
-    download_file "https://ftp.denx.de/pub/u-boot/u-boot-2025.07.tar.bz2" "$DL_DIR/u-boot-2025.07.tar.bz2"
     # Linux
     download_file "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.41.tar.xz" "$DL_DIR/linux-6.12.41.tar.xz"
-    # Buildroot
-    download_file "https://buildroot.org/downloads/buildroot-2025.02.1.tar.gz" "$DL_DIR/buildroot-2025.02.1.tar.gz"
     # BusyBox
     download_file "https://busybox.net/downloads/busybox-1.36.1.tar.bz2" "$DL_DIR/busybox-1.36.1.tar.bz2"
 
     log_info "=== Extracting sources ==="
     extract_archive "$DL_DIR/armv7-eabihf--glibc--stable-2025.08-1.tar.xz" "$WORK_DIR/toolchain"
-    extract_archive "$DL_DIR/u-boot-2025.07.tar.bz2" "$WORK_DIR/src"
     extract_archive "$DL_DIR/linux-6.12.41.tar.xz" "$WORK_DIR/src"
-    extract_archive "$DL_DIR/buildroot-2025.02.1.tar.gz" "$WORK_DIR/src"
     extract_archive "$DL_DIR/busybox-1.36.1.tar.bz2" "$WORK_DIR/src"
 
     # Fix toolchain layout (Bootlin extracts into subdir)
@@ -157,8 +149,8 @@ main() {
     log_info "=== Bootstrap complete ==="
     log_info ""
     log_info "Next steps:"
-    log_info "  1. Run ./build.sh to build the complete firmware"
-    log_info "  2. Flash the resulting image: sudo dd if=output/firmware/ga36-custom.img of=/dev/sdX bs=1M status=progress"
+    log_info "  1. Run ./build.sh to build the firmware"
+    log_info "  2. Flash the resulting image: sudo dd if=output/firmware/ga36-stockboot.img of=/dev/sdX bs=4M status=progress"
 }
 
 main "$@"

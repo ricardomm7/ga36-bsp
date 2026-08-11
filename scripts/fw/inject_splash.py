@@ -1,4 +1,8 @@
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    print("Skipping splash injection: python3-PIL (pillow) not installed.")
+    sys.exit(0)
 import gzip
 import io
 import sys

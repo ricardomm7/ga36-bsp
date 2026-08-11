@@ -67,17 +67,14 @@ else
 fi
 
 echo "==[3/4] sources =="
-# U-Boot
-dl "https://ftp.denx.de/pub/u-boot/u-boot-$UBOOT_VERSION.tar.bz2" "$FW_DL"
 # Linux
 dl "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$LINUX_VERSION.tar.xz" "$FW_DL"
 # BusyBox
 dl "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" "$FW_DL"
 
 echo "==[4/4] host sanity =="
-for t in make gcc git dtc bc python3 cpio patch xz mke2fs mkimage; do
+for t in make gcc git dtc bc python3 cpio patch xz mke2fs; do
   need_cmd "$t" || true
 done
-command -v mkimage >/dev/null 2>&1 && echo "mkimage: system (OK)" || echo "mkimage: will come from U-Boot build"
 
 echo "bootstrap complete. build area: $FW_WORK"
