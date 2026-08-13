@@ -26,7 +26,7 @@ fex section | fex evidence | mainline node | driver | DTS status
 ---|---|---|---|---
 `[sdc0]` | PF00-05 (mmc0), det **PB04**, power `axp22_dcdc1` | `&mmc0` | `allwinner,sun7i-a20-mmc` | enabled
 `[uart_para]` | `uart_debug_port=2`, **PB00/PB01 mux 2** | `&uart2` + `uart2_pb_pins` | dw8250 | enabled (console)
-`[uart1]` | PG06-09 mux 2 | `&uart1` | dw8250 | enabled
+`[uart1]` | PG06-09 mux 2 | `&uart1` + `uart1_pg_pins` | dw8250 | enabled — **the analog-stick MCU link** (IRQ 33)
 `[pmu_sply]` | RSB PL00/PL01, axp223 | `&r_rsb` + `pmic@3a3` | axp20x | enabled
 `[lcd0]` | jd9366, 640x480, **lcd_if=4 (DSI)**, lane 2, PWM **PH00**, PH07, dc1sw | dsi/dphy/tcon0 + panel@0 `boe,jd9366` | sun6i-mipi-dsi + jd9366-ga36mbv1-2 | enabled (Route A, validated in build)
 `[lcd0]` pwm | `pwm_used=1`, 20000 Hz | `&pwm` + backlight | pwm-sun4i, pwm-backlight | enabled
@@ -45,8 +45,9 @@ fex section | fex evidence | mainline node | driver | DTS status
 `[dram_para]` | **552 MHz DDR3**, zq 0xf777, odt, tpr0-13 | — (U-Boot DRAM init) | — | U-Boot workstream
 `[boot]` | `boot_clock=1008` | — | — | U-Boot/kernel defreq
 
-Buttons/analog sticks: **not described by the fex**. Their GPIO map must be
-measured on the board (see §5, gate 8).
+Buttons/analog sticks: **not described by the fex** — fully recovered from the
+vendor gamepad module (`udt_joystick.ko`) and kernel UART1 RX decoder instead
+(see §8).
 
 ## 3. Key mapping rules (learned)
 
@@ -149,9 +150,13 @@ diagnostic* to *complex*:
 5. **Display** — workstream D.
 6. **USB OTG** — ID detect on PH08; `lsusb` + gadget mode.
 7. **Audio** — `speaker-test`/`aplay`; verify PH09 amp enable drives the amp.
-8. **Input** — probe GPIOs with `evtest`/gpio tool while pressing buttons and
-   moving the sticks; build the real key map (not derivable from the fex).
-9. **DRAM 552 MHz** — `memtester`; tune `CONFIG_DRAM_CLK` in U-Boot if needed.
+8. **Input — 16 buttons as gpio-keys** — map is fully known (see §8); wire
+   `&r_pio`/`&pio` gpio-keys and verify each with `evtest`.
+9. **Analog sticks over UART1** — see §8. Frame header `A7 10 00` is the
+   sync; **the only unknown left is the baud** — the vendor kernel's
+   `init_termios` is B9600 and its `set_termios` programs DLL/DLH on open
+   (see §6), so scan **9600 first** (then 115200) for `A7 10 00`.
+10. **DRAM 552 MHz** — `memtester`; tune `CONFIG_DRAM_CLK` in U-Boot if needed.
 
 ## 6. Risks / unknowns
 
@@ -159,7 +164,25 @@ diagnostic* to *complex*:
 - JD9366 panel init sequence — not in the fex, must come from vendor kernel.
 - Real RAM size — fex DRAM 552 MHz + DDR3 confirmed, capacity unconfirmed.
 - dcdc5 1350 mV vs 1.5 V nominal — firmware value, verify on board.
-- Button/analog GPIO map — unknown, must be measured.
+- **UART1 baud** — **RESOLVED from the vendor kernel binary** (GA36 `zImage`,
+  VA = `0xc0008000` + file offset): the driver does *not* leave the baud to
+  firmware. `serial_core`'s `uart_register_driver` (file `0x235318`) sets
+  `init_termios.c_cflag = 0xcbd` (= `B9600|CS8|CREAD|HUPCL|CLOCAL`,
+  `c_ispeed = c_ospeed = 0x2580` = 9600), and the runtime `sunxi_uart_ops`
+  entry `set_termios` (file `0x2376ec`) is **non-NULL**: on open,
+  `uart_startup` → `uart_change_speed` calls it, which resolves the baud via
+  `uart_get_baud_rate` (file `0x2359bc`) → `uart_get_divisor` (file
+  `0x235d70`, divisor = uartclk/(16·baud), 156 for 9600 @ 24 MHz) and programs
+  **DLL/DLH** (file `0x235d18`). So opening `/dev/ttyS1` programs the port to
+  **9600** unless userspace sets termios first. The earlier "0x14b2 (B115200)"
+  movw hits were byte-offset misreads — the real constants are `0x4b2` (an
+  audio driver, unrelated) and `0xcbd`/`0x4bd` (both B9600). The MCU stick is
+  therefore most likely fixed at **9600**.
+- Second SD slot / mmc1/mmc2 — fex `used=0`; physical slot existence unconfirmed.
+- Headphone jack-detect GPIO — not exposed in the fex; vendor uses
+  `/sys/class/switch/h2w/state` (needs a GPIO scan on bench).
+- Hardware volume keys — fex has no `[keyboard]`/LRADC keymap; volume is
+  handled in software (RetroArch hotkeys L2/R2 combos), no GPIO to map.
 - U-Boot FIT conversion — removes script.bin; any error = silent black screen.
 
 ## 7. Reference material
@@ -169,3 +192,113 @@ diagnostic* to *complex*:
 - `output/fex-decode-full.txt` for every `used=`/GPIO/voltage number quoted
   above.
 - Buildroot reference for sunxi/A33: `configs/olimex_a33_olinuxino_defconfig`.
+
+## 8. Controls recovery (from vendor binaries, not the fex)
+
+Source: `udt_joystick.ko` (stock `usr/lib/modules/`, the only gamepad module)
+plus the vendor 3.4 kernel's UART1 RX decoder.
+
+### 8.1 Buttons — 16 × gpio-keys on the A33 `&pio` (PE/PB banks)
+
+| idx | GPIO | pin | input keycode | meaning |
+|---|---|---|---|---|
+| 0  | 145 | PE17 | 311 BTN_TR   | R1 |
+| 1  | 144 | PE16 | 313 BTN_TR2  | R2 |
+| 2  | 143 | PE15 | 310 BTN_TL   | L1 |
+| 3  | 142 | PE14 | 312 BTN_TL2  | L2 |
+| 4  | 141 | PE13 | 304 BTN_A    | A |
+| 5  | 140 | PE12 | 305 BTN_B    | B |
+| 6  | 139 | PE11 | 307 BTN_X    | X |
+| 7  | 138 | PE10 | 308 BTN_Y    | Y |
+| 8  | 135 | PE7  | 546 BTN_DPAD_LEFT  | DPAD-L |
+| 9  | 134 | PE6  | 547 BTN_DPAD_RIGHT | DPAD-R |
+| 10 | 137 | PE9  | 544 BTN_DPAD_UP    | DPAD-U |
+| 11 | 136 | PE8  | 545 BTN_DPAD_DOWN  | DPAD-D |
+| 12 | 133 | PE5  | 314 BTN_SELECT | SELECT |
+| 13 | 132 | PE4  | 315 BTN_START  | START |
+| 14 | 35  | PB3  | 317 BTN_THUMBL | L3 |
+| 15 | 34  | PB2  | 318 BTN_THUMBR | R3 |
+
+- FN = GPIO 129 (PE1) → `KEY_FN` (464), a **separate** input device (the
+  vendor's `udt_keyboard`); holding it switches the module to "keyboard" mode
+  and emits its own key events.
+- GPIOn arithmetic: pin = bank_base + n, PE base = 128, PB base = 32.
+- The vendor reads the 16 buttons with `gpio_get_value` + a 5-ms debounce in
+  `jk_keys_poll` and feeds a **polled input device** named `micro_gamepad`
+  (matches the RetroArch autoconfig `input_device = "micro_gamepad"`).
+
+### 8.2 Analog sticks — UART1 frame decoder (in the vendor kernel)
+
+The vendor kernel's own `sw_uart_irq` (sunxi-uart driver, `sun8i-a33`) has a
+vendor hook: on the port whose `port[0x24] == 33` (UART1, IRQ 33) it runs a
+tiny frame state machine that writes into a global struct at VA `0xc0a71400`
+(offsets: `state=+0x474`, `buff_rcv_Len=+0x478`, `buff_rcv[0..7]=+0x47c`).
+`buff_rcv` = `0xc0a7187c`, `buff_rcv_Len` = `0xc0a71878` (both exported —
+this is why direct-address scans for `0xc0a7187c` found no writer: the code
+loads the struct base `0xc0a71400`).
+
+Verified serial-core / sunxi-uart symbols from the vendor `zImage` (VA =
+`0xc0008000` + file, all ARM, confirmed against `__ksymtab` `{value, name}`
+entries in the `0x684af0` region):
+
+| symbol | VA | file |
+|---|---|---|
+| `uart_register_driver` | `0xc023d318` | `0x235318` |
+| `uart_get_baud_rate` | `0xc023d9bc` | `0x2359bc` |
+| `uart_get_divisor` | `0xc023bd70` | `0x235d70` |
+| `uart_add_one_port` | `0xc023c524` | `0x234524` |
+| sw-uart `set_termios` (ops) | `0xc023f6ec` | `0x2376ec` |
+| sw-uart baud-write helper | `0xc023bd18` | `0x235d18` |
+| `buff_rcv` | `0xc0a7187c` | `0xa7187c` |
+| `buff_rcv_Len` | `0xc0a71878` | `0xa71878` |
+| sw_uart_* exported (alt. link) | `0xc053fa60`–`0xc053fc95` | `0x537a60`–`0x537c95` |
+
+(The `sw_uart_*` symbols exported via the driver's own module-style ksymtab
+link at `0xc053exxx`, but the runtime `ports[]` ops table points at the
+`0xc023exxx` implementations — the ones verified above.)
+
+Frame format (little-endian byte stream on UART1 RX, decoded per byte):
+
+```
+A7 10 00  Lx Ly Rx Ry  [b7] [b8]
+```
+
+- `A7 10 00` = sync header (A7 → state 1, 10 → state 2, 00 → state 3).
+- `Lx Ly Rx Ry` = raw 0..255 stick bytes.
+- `b7`/`b8` = optional tail (frame resets if more than 8 payload bytes).
+- Driver map (module `adc_val_to_axis`): `0..50 → 0`, `51..108 → (v-50)/7+1`,
+  `109..147 → 9` (deadzone), `148..204 → (v-148)/7+10`, `205..255 → 18`.
+  Reported as a polled ABS device: `ABS_X`/`ABS_Y`/`ABS_RX`/`ABS_RY`,
+  range 0..18, centre 9. **Lx and Ly are inverted in the vendor driver**
+  (`18 - axis`), Rx/Ry are not.
+
+### 8.3 Vendor stick handshake (module ↔ MCU — NOT needed in mainline)
+
+The module writes 6 bytes to `/dev/ttyS1` (`encry_rw`, no termios) and a
+delayed-work auth (`anti_work_func`) validates `buff_rcv[3..6]` against a
+per-boot random key:
+
+```
+data[11] == (Lx ^ Ry ^ 0x5a) - 1
+data[12] == (Ry ^ Ly ^ 0x5a) - 2
+data[13] == (Ry ^ Rx ^ 0x5a) - 3
+```
+
+3 failures → drive GPIO 202 (PH10) low to reset the stick MCU. This is
+anti-piracy glue. The MCU streams the `A7 10 00` frames regardless of auth,
+so mainline only needs RX + the frame decode.
+
+### 8.4 RetroArch mapping (stock EmuELEC autoconfig)
+
+`/etc/retroarch-joypad-autoconfig/micro_gamepad.cfg` (udev driver):
+B=0, Y=3, A=1, X=2, d-pad 13/14/15/16, select=8, start=9, L=4, R=5, L2=6,
+R2=7, L3=11, R3=12; axes Lx=−0/+0, Ly=−1/+1, Rx=−2/+2, Ry=−3/+3.
+
+### 8.5 Open questions (input)
+
+- UART1 baud — **resolved to 9600** from the vendor kernel (`init_termios`
+  `0xcbd`, verified `set_termios` → DLL/DLH path; see §6). Confirm the MCU on
+  bench: scan 9600 first, then 115200.
+- Whether the stick MCU talks at all without the vendor handshake — test by
+  scanning bauds for `A7 10 00` with the UART1 RX pin (PG07) floating vs
+  wired to the stick FPC. Kernel-side evidence points to **9600** (see §6).
