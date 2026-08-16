@@ -1,8 +1,8 @@
 # Kernel config fragment — merged on top of sunxi_defconfig (v6.12).
 # Route A: boots from the STOCK sunxi bootloader via an Android boot image
 # (kernel + appended DTB), so the cmdline is FORCED here (the stock
-# bootloader's own bootargs are ignored). Root is the ext4 partition at
-# 128 MiB (mmcblk0p1), matching docs/GA36-MB-Linux packaging.
+# bootloader's own bootargs are ignored). Root is the ext4 partition inside
+# MBR P1 at sector 3383336 (mmcblk0p1), the factory "UDISK" slot.
 #
 # The merged result is canonicalized with `make savedefconfig` into
 # board/ga36-mb-v1.2/linux-ga36.config (the stored, reproducible config).
@@ -17,6 +17,7 @@ CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_EXT4_FS=y
 CONFIG_VFAT_FS=y
 CONFIG_GPIO_SYSFS=y
+CONFIG_KEYBOARD_GPIO=y
 CONFIG_PANIC_TIMEOUT=10
 CONFIG_DRM_MIPI_DSI=y
 CONFIG_DRM_SUN6I_DSI=y

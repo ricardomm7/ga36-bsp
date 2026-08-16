@@ -55,13 +55,11 @@ my-image/
 ├── build.sh                  # Single build entry: ./build.sh
 ├── cleanup.sh                # Targeted disk cleanup (keeps download cache)
 ├── CONTRIBUTING.md           # Contributor guide
-├── REPRODUCIBILITY.md        # Complete audit report
 ├── board/ga36-mb-v1.2/       # Board-specific configs, JD9366 DCS init + driver
 ├── bmps/                     # Custom boot splash (injected into the boot chain)
 ├── bootloader/               # Stock 128 MiB boot chain (boot0/boot1/env/boot)
 ├── configs/                  # sources.env (pinned versions)
 ├── dts/                      # Kernel DTS
-├── extract/                  # Scratch area for extracted vendor artifacts (gitignored)
 ├── output/                   # Build artifacts (generated)
 │   ├── firmware/ga36-stockboot.img   # THE image (stock bootloader + our kernel)
 │   └── boot/                      # Kernel, DTB, initramfs, android_boot.img
@@ -149,7 +147,6 @@ eGON checksum, `ANDROID!` magic @172032, P1 start + ext4 superblock.
 
 | File | Content |
 |------|---------|
-| `REPRODUCIBILITY.md` | Complete audit: all paths fixed, deps eliminated, how to build on clean machine |
 | `docs/BUILD.md` | Single build & reproducibility guide |
 | `docs/REVERSE_ENGINEERING.md` | Hardware validation checklist (UART, GPIO, LCD, OTG, etc.) |
 | `docs/STATUS.md` | Bring-up status table |
@@ -184,8 +181,6 @@ Reference ports used as evidence (not vendored):
 | Feature | Status | Notes |
 |---------|--------|-------|
 | SD2 (MMC1) | ❌ | Intentionally unassigned — needs GPIO validation |
-| Touchscreen | ❌ | Controller unknown — needs measurement |
-| WiFi/BT | ❌ | Hardware presence unknown |
 | Gamepad polarity | 🟡 | buttons/FN wired as **active-low** gpio-keys (R36S-family standard; map from the vendor `udt_joystick.ko`). If inputs report inverted on the bench, flip `GPIO_ACTIVE_LOW`↔`GPIO_ACTIVE_HIGH` in `dts/sun8i-a33-ga36-mb-v1.2.dts` and rebuild |
 | Analog sticks | 🟡 | UART1 (PG06-09) frame decoder recovered from the vendor kernel (`A7 10 00` @ **9600** baud — migration-plan §8.2/§6); RX driver not written yet |
 | Display | ✅ | JD9366 **MIPI-DSI** boots to **fbcon on silicon**: vendor DCS extracted (hash-pinned), DRM panel driver + DSI wiring complete. Test image: `output/firmware/ga36-stockboot.img` |
@@ -214,5 +209,3 @@ MBR and the factory boot0/boot1. The JD9366 init sequence is committed as
 Edit `scripts/fw/env.sh` — single source of truth for all versions (mirrored in `configs/sources.env`).
 
 ---
-
-*Generated from consolidated docs/ folder. See REPRODUCIBILITY.md for full audit.*
