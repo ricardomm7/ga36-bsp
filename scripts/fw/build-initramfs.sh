@@ -8,6 +8,13 @@ need_cmd make need_cmd tar need_cmd cp need_cmd cpio need_cmd gzip
 BB_SRC="$FW_SRC/busybox-$BUSYBOX_VERSION"
 ROOTFS="$FW_WORK/build/initramfs"
 
+# 1-3. Extract, configure and build static BusyBox, but ONLY when the staging
+# is missing. On a repo sitting on /mnt/c (NTFS, case-insensitive) the
+# toolchain's glibc/ncurses builds break (see env.sh), so build.sh must be
+# able to reuse an existing staging. Force a real rebuild with
+# `rm -rf "$FW_WORK/build"` or `./build.sh --clean`. Steps 4-5 still rewrite
+# the init scripts and repackage the cpio on every run.
+if [ ! -x "$ROOTFS/bin/busybox" ]; then
 # 1. Extract source if needed.
 if [ ! -d "$BB_SRC" ]; then
   if [ ! -f "$FW_DL/busybox-$BUSYBOX_VERSION.tar.bz2" ]; then
@@ -40,6 +47,9 @@ make -C "$BB_SRC" -j"$(nproc)" >/dev/null
 rm -rf "$ROOTFS"
 mkdir -p "$ROOTFS"
 make -C "$BB_SRC" CONFIG_PREFIX="$ROOTFS" install >/dev/null
+else
+  echo "Reusing existing BusyBox staging ($ROOTFS)" >&2
+fi
 
 # 4. Init scripts and base config.
 cat > "$ROOTFS/init" <<'EOF'
