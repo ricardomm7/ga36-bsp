@@ -4,6 +4,21 @@ Start with generated facts in `analysis.md`. Add each bench-proven electrical fa
 
 ## FACTS
 
+### 2026-08-16 — Gamepad map recovered from the vendor module; implemented in the DTS (static, unproven)
+- **Finding:** the 16 button pins (PE4-17, PB2-3) and the FN pin (PE1) were
+  recovered from the stock gamepad module `udt_joystick.ko`, which polls the
+  GPIOs with `gpio_get_value` + a 5-ms debounce and feeds a polled input
+  device named `micro_gamepad` (FN is a separate `udt_keyboard` device on
+  PE1). Implemented in `dts/sun8i-a33-ga36-mb-v1.2.dts` as two gpio-keys
+  nodes (`micro_gamepad` + `fn-key`, `CONFIG_KEYBOARD_GPIO=y`), each button
+  `GPIO_ACTIVE_LOW` with `bias-pull-up` pin groups in `&pio`, per the
+  R36S-family standard.
+- **Silicon status: NOT CONFIRMED** — active-low + pull-up is an assumption.
+  Verify on the flashed image: `cat /proc/bus/input/devices` (expect
+  `micro_gamepad` and `fn-key`), then `cat /proc/interrupts` while pressing
+  buttons (PIO IRQ counter must increment). If every input reports inverted,
+  flip `GPIO_ACTIVE_LOW`↔`GPIO_ACTIVE_HIGH` in the DTS and rebuild.
+
 ### 2026-08-11 — Kernel boots to fbcon; missing `/memory` node was the crash (silicon-proven)
 - **Finding:** with the explicit 512 MiB `/memory` node in
   `dts/sun8i-a33-ga36-mb-v1.2.dts`, the mainline 6.12 kernel **boots** on the
@@ -12,8 +27,9 @@ Start with generated facts in `analysis.md`. Add each bench-proven electrical fa
   node and relied on `CONFIG_ARM_ATAG_DTB_COMPAT`. The stock boot1 does **not**
   reliably deliver ATAG_MEM to a mainline zImage on this unit, so the kernel
   crashed before the console. The working community DTS
-  (`docs/GA36-MB-Linux/sun8i-a33-ga36mb-v12.dts`) declares
-  `memory@40000000 { reg = <0x40000000 0x20000000>; }` — copied verbatim.
+  ([`sun8i-a33-ga36mb-v12.dts`](https://github.com/CodeZombie/GA36-MB-Linux))
+  declares `memory@40000000 { reg = <0x40000000 0x20000000>; }` — copied
+  verbatim.
 - **Silicon status: CONFIRMED.**
 
 ### 2026-08-11 — This unit's boot1 requires the factory PhoenixCard DOS MBR (silicon-proven)
@@ -41,8 +57,9 @@ Start with generated facts in `analysis.md`. Add each bench-proven electrical fa
 ### 2026-08-11 — Kernel must sit at LBA 172032, not 172031 (static, source-confirmed)
 - **Finding:** the stock bootloader reads the Android boot image from sector
   **172032** (64 MiB + 0x1000 into the boot partition; confirmed in
-  `docs/GA36-MB-Linux`: `dd if=boot.img of=new.img bs=512 seek=172032`, and in
-  the original `package-stock.sh`).
+  [CodeZombie/GA36-MB-Linux](https://github.com/CodeZombie/GA36-MB-Linux):
+  `dd if=boot.img of=new.img bs=512 seek=172032`, and in the original
+  `package-stock.sh`).
 - **Regression:** commit `7ead1c8` changed `BOOT_IMG_LBA` 172032 → 172031,
   so the image landed one sector early and the stock bootloader never found
   the kernel — the board stayed stuck on the splash logo.

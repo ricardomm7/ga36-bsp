@@ -17,8 +17,10 @@ sunxi-tools). Canonical outputs:
 | `output/fex-format-notes.md` | corrected fex binary layout (per-section entry lists) |
 | `output/ga36-mb-v1.2.dts` | mainline DTS draft (compiles against v6.12, dtc-validated) |
 
-Status: the DTS and Buildroot defconfig are **DRAFT / WIP**. No silicon
-validation has happened yet; every value is the firmware's, not measured.
+Status: **Route A is DONE and boots to fbcon on silicon** — kernel 6.12.41 +
+ext4 rootfs (`init=/sbin/init`), JD9366 display, and gamepad + FN gpio-keys
+in the DTS. Values are the firmware's unless explicitly marked silicon-proven.
+The mainline U-Boot replacement (§4, workstream "Boot") is still future work.
 
 ## 2. fex section → DTS node mapping
 
@@ -100,9 +102,10 @@ so no U-Boot rebuild is needed to boot. Mainline U-Boot remains future work:
 
 ### D. Display panel (JD9366) — solved for Route A
 - Driver: `board/ga36-mb-v1.2/jd9366-ga36mbv1-2.c` (plumbing ported from the
-  community GA36-MB driver in `docs/GA36-MB-Linux`, proven on silicon),
-  registered as `CONFIG_DRM_PANEL_JD9366` (Kconfig + Makefile injected by
-  `scripts/fw/build-linux.sh`).
+  community GA36-MB driver
+  [jd9366-ga36mbv1-2.c](https://github.com/CodeZombie/GA36-MB-Linux), proven
+  on silicon), registered as `CONFIG_DRM_PANEL_JD9366` (Kconfig + Makefile
+  injected by `scripts/fw/build-linux.sh`).
 - Init DCS is **not** hardcoded: it comes from
   `board/ga36-mb-v1.2/jd9366_init.h`, auto-extracted from the vendor `lcd.ko`
   and hash-pinned (`scripts/fw/recover-lcd-dcs.sh`, see REPRODUCIBILITY.md).
@@ -114,7 +117,11 @@ so no U-Boot rebuild is needed to boot. Mainline U-Boot remains future work:
 
 1. Factory DOS MBR (byte-exact, `bootloader/ga36-stock-mbr.bin`) at sector 0 —
    this unit's boot1 does not boot a plain sfdisk MBR (see STATUS.md).
-2. `bootloader/ga36-stock-bootchain-128m.bin.gz` é descomprimido on-the-fly e os seus 262143 setores copiados para a imagem — preserva os vitais `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264`, EBRs e os misteriosos offsets de configurações de fábrica, sem necessitar da gigantesca `test.img` original.
+2. `bootloader/ga36-stock-bootchain-128m.bin.gz` is decompressed on the fly
+   and its 262143 sectors copied into the image — this preserves the vital
+   `boot0@LBA16`, `boot1@LBA38192`, sunxi MBR `@40960`, `env@139264`, EBRs and
+   the mysterious factory-config offsets without needing the huge original
+   `test.img`.
 3. `output/firmware/boot/android_boot.img` written at `LBA 172032` (the stock
    "boot" partition). Built by `scripts/fw/build-linux.sh` via
    `scripts/fw/helpers/mkbootimg.py`:
@@ -139,7 +146,8 @@ Silent-failure risk is high (dark screen, no log), so gates go from *cheap and
 diagnostic* to *complex*:
 
 1. **Serial console (UART2, PB00/PB01)** — first gate. 3.3V UART on the debug
-   pads near the PCB top (see `docs/darkos-ga36-port/docs/hardware.md`).
+   pads near the PCB top (see
+   [madeiragab/darkos-ga36-port](https://github.com/madeiragab/darkos-ga36-port/blob/main/docs/hardware.md)).
    Proves SoC + PMIC + DRAM via U-Boot + kernel logs.
 2. **PMIC** — dump AXP registers over RSB, compare to fex `[power_sply]`
    (dcdc1 3300, dcdc2 1100, dcdc3 1260, dcdc5 1350, aldo2 2500, aldo3 3000).
@@ -150,8 +158,12 @@ diagnostic* to *complex*:
 5. **Display** — workstream D.
 6. **USB OTG** — ID detect on PH08; `lsusb` + gadget mode.
 7. **Audio** — `speaker-test`/`aplay`; verify PH09 amp enable drives the amp.
-8. **Input — 16 buttons as gpio-keys** — map is fully known (see §8); wire
-   `&r_pio`/`&pio` gpio-keys and verify each with `evtest`.
+8. **Input — 16 buttons as gpio-keys** — DONE in the DTS (map fully known,
+   see §8; `micro_gamepad` + `fn-key` gpio-keys nodes, `CONFIG_KEYBOARD_GPIO`).
+   Remaining: silicon gate — `cat /proc/bus/input/devices` (expect the two
+   devices) and `cat /proc/interrupts` while pressing buttons (PIO IRQ
+   counter must increment); if inverted, flip
+   `GPIO_ACTIVE_LOW`↔`GPIO_ACTIVE_HIGH` in the DTS.
 9. **Analog sticks over UART1** — see §8. Frame header `A7 10 00` is the
    sync; **the only unknown left is the baud** — the vendor kernel's
    `init_termios` is B9600 and its `set_termios` programs DLL/DLH on open
@@ -226,6 +238,11 @@ plus the vendor 3.4 kernel's UART1 RX decoder.
 - The vendor reads the 16 buttons with `gpio_get_value` + a 5-ms debounce in
   `jk_keys_poll` and feeds a **polled input device** named `micro_gamepad`
   (matches the RetroArch autoconfig `input_device = "micro_gamepad"`).
+- **Implemented** in `dts/sun8i-a33-ga36-mb-v1.2.dts` as two gpio-keys nodes
+  (`micro_gamepad` + `fn-key`), each button `GPIO_ACTIVE_LOW` with
+  `bias-pull-up` pin groups, kernel `CONFIG_KEYBOARD_GPIO=y`. Polarity is the
+  R36S-family standard but is **unproven on silicon** — see
+  docs/hardware-notes.md (2026-08-16) for the verification recipe.
 
 ### 8.2 Analog sticks — UART1 frame decoder (in the vendor kernel)
 

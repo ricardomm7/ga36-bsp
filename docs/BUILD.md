@@ -29,6 +29,14 @@ on any dev machine. There is exactly **one** dependency-fetch step and exactly
 
 Pipeline: `build-linux.sh` → `build-initramfs.sh` → `package-stock.sh`.
 
+The initramfs step is **idempotent**: if a BusyBox staging tree already exists
+(`$ROOTFS/bin/busybox`) it is reused and only the rootfs config + cpio archive
+are regenerated. This matters on NTFS mounts (`/mnt/c`, WSL): extracting the
+Bootlin toolchain and building glibc/ncurses from source breaks on NTFS, but a
+staging tree built under a native-Linux `GA36_FW_WORK` dir can be reused from
+there. `./build.sh --clean` (or `rm -rf "$GA36_FW_WORK/build"`) forces a true
+from-scratch rebuild.
+
 ### Prerequisite
 
 The stock boot chain (boot0/boot1, sunxi MBR, env and the stock boot
@@ -50,9 +58,11 @@ fully self-contained: no external SD dump is required.
   (`board/ga36-mb-v1.2/jd9366_init.h`, hash-pinned) and the boot chain
   (`bootloader/ga36-stock-bootchain-128m.bin.gz`) are checked in, so builds do
   not need the factory SD.
-- **Verification is built in**: `package-stock.sh` checks the boot0 eGON
-  checksum, the `ANDROID!` magic at LBA 172032, the MBR signature and the
-  partition start.
+- **Verification is built in**: `package-stock.sh` fails the build if any
+  self-check fails — boot0 eGON checksum VALID, `ANDROID!` magic at
+  LBA 172032, MBR `0x55aa` signature with byte-exact factory MBR, the
+  partition table (ext4 rootfs as MBR P1 at LBA 3383336) and the ext4
+  superblock magic `0xef53`.
 
 ## Cleaning
 

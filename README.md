@@ -40,8 +40,8 @@ sudo dd if=output/firmware/ga36-stockboot.img of=/dev/sdX bs=4M conv=fsync statu
 The stock Allwinner bootloader (boot0/boot1 from your factory card) is
 **preserved intact** in the image; only the kernel inside the stock "boot"
 partition is replaced with our Linux kernel. This is the fastest and safest
-path to a display — exactly how the community GA36-MB Linux port boots
-(`docs/GA36-MB-Linux`).
+path to a display — exactly how the community GA36-MB port boots
+([CodeZombie/GA36-MB-Linux](https://github.com/CodeZombie/GA36-MB-Linux)).
 
 **All downloaded by `bootstrap.sh` into `work/dl/` — fully offline after first run.**
 
@@ -53,13 +53,15 @@ path to a display — exactly how the community GA36-MB Linux port boots
 my-image/
 ├── bootstrap.sh              # One-time: downloads all sources
 ├── build.sh                  # Single build entry: ./build.sh
+├── cleanup.sh                # Targeted disk cleanup (keeps download cache)
+├── CONTRIBUTING.md           # Contributor guide
 ├── REPRODUCIBILITY.md        # Complete audit report
 ├── board/ga36-mb-v1.2/       # Board-specific configs, JD9366 DCS init + driver
 ├── bmps/                     # Custom boot splash (injected into the boot chain)
 ├── bootloader/               # Stock 128 MiB boot chain (boot0/boot1/env/boot)
 ├── configs/                  # sources.env (pinned versions)
 ├── dts/                      # Kernel DTS
-├── extract/                  # Vendor artifacts (read-only, gitignored)
+├── extract/                  # Scratch area for extracted vendor artifacts (gitignored)
 ├── output/                   # Build artifacts (generated)
 │   ├── firmware/ga36-stockboot.img   # THE image (stock bootloader + our kernel)
 │   └── boot/                      # Kernel, DTB, initramfs, android_boot.img
@@ -113,6 +115,7 @@ my-image/
 | PWM Backlight | ✅ | PWM0 @ PH00, 20 kHz |
 | AXP223 PMIC | ✅ | RSB, DCDC1-5 configured |
 | UART2 Console | ✅ | PB00/PB01 @ 115200n8 |
+| Input (16 buttons + FN) | ✅ | DTS gpio-keys `micro_gamepad` + `fn-key`; map recovered from the stock `udt_joystick.ko` (docs/migration-plan.md §8.1). Active-low + pull-up assumed — polarity unproven on silicon |
 | USB OTG | ✅ | PH08 ID detect, DRIVEVBUS |
 | SD Card (MMC0) | ✅ | PF00-05, CD @ PB04 |
 | Audio (Codec + Amp) | ✅ | PA enable @ PH09 |
@@ -156,7 +159,11 @@ eGON checksum, `ANDROID!` magic @172032, P1 start + ext4 superblock.
 | `docs/hardware-vs-firmware.md` | Forensic proof: firmware is A33, not RK3326 |
 | `docs/spl-vs-boot0-audit.md` | Why the stock boot0 is kept (SPL vs vendor boot0 comparison) |
 | `docs/migration-plan.md` | Display bring-up plan |
-| `docs/GA36-MB-Linux/` | The community reference port that this project builds on |
+| `docs/GA36-MB-Linux/` | *(removed)* — reference now lives upstream |
+
+Reference ports used as evidence (not vendored):
+- [CodeZombie/GA36-MB-Linux](https://github.com/CodeZombie/GA36-MB-Linux) — community mainline kernel + DTS for this exact board (boot image at LBA 172032, `sun8i-a33-ga36mb-v12.dts`, `jd9366-ga36mbv1-2.c`).
+- [madeiragab/darkos-ga36-port](https://github.com/madeiragab/darkos-ga36-port) — GA36-MB (A33) autopsy / preservation / hardware notes.
 
 ---
 
@@ -177,16 +184,24 @@ eGON checksum, `ANDROID!` magic @172032, P1 start + ext4 superblock.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | SD2 (MMC1) | ❌ | Intentionally unassigned — needs GPIO validation |
-| FN button | ❌ | GPIO wiring unknown — needs measurement |
 | Touchscreen | ❌ | Controller unknown — needs measurement |
 | WiFi/BT | ❌ | Hardware presence unknown |
-| Display | 🟡 | JD9366 **MIPI-DSI**: vendor DCS extracted (hash-pinned), DRM panel driver + DSI wiring complete. Test image: `output/firmware/ga36-stockboot.img` |
+| Gamepad polarity | 🟡 | buttons/FN wired as **active-low** gpio-keys (R36S-family standard; map from the vendor `udt_joystick.ko`). If inputs report inverted on the bench, flip `GPIO_ACTIVE_LOW`↔`GPIO_ACTIVE_HIGH` in `dts/sun8i-a33-ga36-mb-v1.2.dts` and rebuild |
+| Analog sticks | 🟡 | UART1 (PG06-09) frame decoder recovered from the vendor kernel (`A7 10 00` @ **9600** baud — migration-plan §8.2/§6); RX driver not written yet |
+| Display | ✅ | JD9366 **MIPI-DSI** boots to **fbcon on silicon**: vendor DCS extracted (hash-pinned), DRM panel driver + DSI wiring complete. Test image: `output/firmware/ga36-stockboot.img` |
 
 ---
 
 ## 📜 License
 
-This project is a clean-room BSP. No vendor blobs included. All sources downloaded from official upstreams.
+GPL-2.0-only. This is a clean-room BSP: kernel, rootfs and build pipeline all
+come from official upstreams (kernel.org, busybox.net, bootlin.com). The only
+unmodified binary it ships is the **stock boot chain**
+(`bootloader/ga36-stock-bootchain-128m.bin.gz` + `ga36-stock-mbr.bin`), which
+must stay verbatim because this unit's boot1 only boots from its factory DOS
+MBR and the factory boot0/boot1. The JD9366 init sequence is committed as
+**data** (`board/ga36-mb-v1.2/jd9366_init.h`) recovered from the vendor
+`lcd.ko` and hash-pinned — no executable vendor code is included.
 
 ---
 

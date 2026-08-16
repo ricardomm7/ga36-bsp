@@ -1,6 +1,6 @@
 # GA36-MB V1.2 (R36S) — Flashing guide
 
-**Image:** `output/firmware/ga36-stockboot.img` (1 GiB raw disk image,
+**Image:** `output/firmware/ga36-stockboot.img` (2 GiB raw disk image,
 `GA36_SD_SIZE_MB` overrides the size).
 
 This image keeps the **stock Allwinner bootloader** (boot0/boot1 from your
@@ -21,7 +21,7 @@ Linux 6.12.41 ──mounts mmcblk0p1▶ ext4 rootfs (static BusyBox, init=/sbin/
 
 | Item | Detail |
 |---|---|
-| microSD card | **≥ 1 GiB** (image is 1 GiB; the card is overwritten completely). |
+| microSD card | **≥ 2 GiB** (image is 2 GiB; the card is overwritten completely). |
 | Card reader + host | Windows, macOS, or Linux |
 | Flasher | Raspberry Pi Imager, balenaEtcher, Rufus (Windows), Win32DiskImager, or `dd` |
 
@@ -76,6 +76,9 @@ and never your system disk. Double-check with `lsblk` before running.
   8N1** (`ttyS2`) — useful if the panel driver has a problem.
 - Rootfs is the static-BusyBox ext4 (labelled `linux`), which blinks the
   backlight via `/sys/class/backlight` in `rcS` to prove userspace is up.
+- The gamepad is wired as gpio-keys: `cat /proc/bus/input/devices` should
+  list `micro_gamepad` (16 buttons) and `fn-key`. If the buttons seem
+  inverted, see the Known Limitations table in README.md (polarity flip).
 
 **If it stays stuck on the stock splash logo**, the kernel is not being
 loaded: confirm `ANDROID!` sits at LBA **172032** (this was previously an

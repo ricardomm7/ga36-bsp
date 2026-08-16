@@ -2,7 +2,7 @@
 """Build an Android boot image (header v0) without the mkbootimg binary.
 
 Emulates the invocation used by the GA36-MB v1.2 stock bootloader path
-(see docs/GA36-MB-Linux/Dockerfile):
+(see https://github.com/CodeZombie/GA36-MB-Linux, Dockerfile):
     mkbootimg --kernel zImage_with_dtb --ramdisk <rd> --base 0x40000000 \\
               --board sun8i --pagesize 2048 -o android_boot.img
 

@@ -4,8 +4,10 @@
  * GA36-MB V1.2 (R36S) handheld.
  *
  * Driver plumbing is derived from the community driver by Jeremy Clark
- * (CodeZombie) for this exact board (docs/GA36-MB-Linux), which was proven
- * to light the panel on silicon. The command/init DCS, however, is NOT
+ * (CodeZombie) for this exact board
+ * (https://github.com/CodeZombie/GA36-MB-Linux, jd9366-ga36mbv1-2.c), which
+ * was proven to light the panel on silicon. The command/init DCS, however,
+ * is NOT
  * hardcoded here: it is sourced from board/ga36-mb-v1.2/jd9366_init.h, which
  * is extracted from the vendor lcd.ko and hash-pinned (see REPRODUCIBILITY.md,
  * "Vendor LCD driver recovery"). Any change to the init sequence therefore
