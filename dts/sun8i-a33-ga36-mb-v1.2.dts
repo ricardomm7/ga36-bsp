@@ -80,9 +80,11 @@
 	 * (`udt_keyboard`) — mirrored here with two gpio-keys nodes, so the
 	 * node name becomes the input device name.
 	 *
+	 * HARDWARE STATUS: CONFIGURED BUT NOT TESTED ON PHYSICAL HARDWARE.
 	 * Buttons are wired to ground (active-low) per the R36S-family
 	 * standard and pulled up in &pio. This is unproven on silicon:
-	 * if every button reports inverted, flip GPIO_ACTIVE_LOW/HIGH here.
+	 * if buttons report inverted on the bench, flip GPIO_ACTIVE_LOW/HIGH
+	 * here and recompile the device tree.
 	 */
 	micro_gamepad: micro_gamepad {
 		compatible = "gpio-keys";

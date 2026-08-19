@@ -27,13 +27,13 @@ if [ -z "$FW_WORK" ]; then
     FW_WORK="$ROOT/work"
 fi
 
-# --- Resolve the opencode temp dir (WSL / git-bash / native) ----------------------------
-if [ -d "/mnt/c/Users/ricar/AppData/Local/Temp/opencode" ]; then
-    OPENCODE_TMP="/mnt/c/Users/ricar/AppData/Local/Temp/opencode"
-elif [ -d "/c/Users/ricar/AppData/Local/Temp/opencode" ]; then
-    OPENCODE_TMP="/c/Users/ricar/AppData/Local/Temp/opencode"
+# --- Resolve the opencode temp dir (portable) ------------------------------------------
+if [ -n "${TMPDIR:-}" ] && [ -d "$TMPDIR/opencode" ]; then
+    OPENCODE_TMP="$TMPDIR/opencode"
 elif [ -n "${LOCALAPPDATA:-}" ] && [ -d "$LOCALAPPDATA/Temp/opencode" ]; then
     OPENCODE_TMP="$LOCALAPPDATA/Temp/opencode"
+elif [ -d "/tmp/opencode" ]; then
+    OPENCODE_TMP="/tmp/opencode"
 else
     OPENCODE_TMP=""
 fi
